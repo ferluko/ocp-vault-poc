@@ -1,0 +1,188 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "version": "1.0.0",
+    "title": "Appointment API",
+    "description": "Appointment Workshop API",
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "basePath": "/",
+  "tags": [
+    {
+      "name": "Appointment",
+      "description": "API for Appointment - TMForum"
+    }
+  ],
+  "schemes": [
+    "http"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/appointment": {
+      "post": {
+        "tags": [
+          "Appointment"
+        ],
+		"summary": "Create a new appointment in system",
+        "description": "Create new appointment",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Appointment created",
+            "schema": {
+              "$ref": "#/definitions/Appointment"
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Appointment"
+        ],
+        "summary": "Get all appointments in system",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "schema": {
+              "$ref": "#/definitions/Appointment"
+            }
+          }
+        }
+      }
+    },
+    "/appointment/{id}": {
+      "get": {
+        "tags": [
+          "Appointment"
+        ],
+        "summary": "Get appointment with given ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Appointment to get",
+            "schema": {
+              "$ref": "#/definitions/Appointment"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Appointment Get",
+            "schema": {
+              "$ref": "#/definitions/Appointment"
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete appointment with given ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Appointment to delete",
+            "schema": {
+              "$ref": "#/definitions/Appointment"
+            }
+          }
+        ],
+        "tags": [
+          "Appointment"
+        ],
+        "responses": {
+          "204": {
+            "description": "Appointment deleted",
+            "schema": {
+              "$ref": "#/definitions/Appointment"
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update appointment with give ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Appointment with new values of properties",
+            "schema": {
+              "$ref": "#/definitions/Appointment"
+            }
+          }
+        ],
+        "tags": [
+          "Appointment"
+        ],
+        "responses": {
+          "200": {
+            "description": "Appointment is updated",
+            "schema": {
+              "$ref": "#/definitions/Appointment"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Appointment": {
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "uniqueItems": true
+        },
+        "href": {
+          "type": "string"
+        },
+        "externalId": {
+          "type": "string"
+        },
+		"category": {
+          "type": "string"
+        },
+		"description": {
+          "type": "string"
+        },
+		"status": {
+          "type": "string"
+        },
+		"creationDate": {
+          "type": "date"
+        },
+		"lastUpdate": {
+          "type": "date"
+        },
+		"validFor": {
+		  "type": "object"
+		},
+		"baseType": {
+          "type": "string"
+        },
+		"type": {
+          "type": "string"
+        },
+		"schemaLocation": {
+          "type": "string"
+        }
+      }
+    },
+    "Appointments": {
+      "type": "array",
+      "$ref": "#/definitions/Appointment"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+#Se crea el claim a mano montando previamente montando un NFS y asignando al PV del claim  
+
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: vault-storage
+  labels:
+    app.kubernetes.io/instance: vault
+    app.kubernetes.io/name: vault
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  selector:
+   matchLabels:
+    app: vault

@@ -1,0 +1,137 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: vault-agent-cabundle
+  labels:
+    app.kubernetes.io/instance: vault-agent
+    app.kubernetes.io/name: vault-agent
+  annotations:
+    service.beta.openshift.io/inject-cabundle: "true"
+data: {}
+
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: vault-app-api
+  namespace: vault-app
+  labels:
+    app: vault-app-api
+    template: vault-app-api
+spec:
+  ports:
+    - name: web
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+  selector:
+    name: vault-app-api
+  type: ClusterIP
+  sessionAffinity: None
+status:
+  loadBalancer: {}
+
+
+---
+kind: DeploymentConfig
+apiVersion: apps.openshift.io/v1
+metadata:
+  name: vault-app-api
+  namespace: vault-app
+  labels:
+    app.kubernetes.io/instance: vault-app-api
+    app.kubernetes.io/name: vault-app-api
+    name: vault-app-api
+    app: vault-app-api
+spec:
+  triggers:
+    - type: ConfigChange
+    - type: ImageChange
+      imageChangeParams:
+        automatic: true
+        containerNames:
+          - vault-app-api
+        from:
+          kind: ImageStreamTag
+          namespace: vault-app
+          name: 'vault-app-api:latest'
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        vault.hashicorp.com/agent-inject: 'true'
+        vault.hashicorp.com/agent-init-first: "true"
+        vault.hashicorp.com/agent-inject-status: "update"
+        #vault.hashicorp.com/ca-key: '/var/run/secrets/kubernetes.io/serviceaccount/ca-bundle/service-ca.crt'
+        vault.hashicorp.com/agent-inject-secret-application.properties: "database/creds/vault-app-mongodb-role"
+        vault.hashicorp.com/agent-inject-template-application.properties: |
+          {{- with secret "database/creds/vault-app-mongodb-role" -}}
+          const config = {db: { SECRET: '{{.Data.username }}:{{.Data.password }}' }};module.exports = config;   
+          {{- end }}
+        #const config = {db: { SECRET: 'admin:password' }};module.exports = config;
+        vault.hashicorp.com/secret-volume-path-application.properties: "/deployments/config"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/role: vault-app-mongodb-role
+        vault.hashicorp.com/tls-skip-verify : "true"
+      labels:
+        app: vault-app-api
+        name: vault-app-api
+    spec:
+      containers:
+        - name: vault-app-api
+          image: image-registry.openshift-image-registry.svc:5000/vault-app/vault-app-api
+          imagePullPolicy: Always
+          env:
+            - name: IP
+              value: mongodb
+            - name: PORT
+              value: '27017'
+            - name: PROPPATH
+              value: /deployments/config/application.properties
+            - name: DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb
+                  key: MONGODB_DATABASE
+            - mountPath: /var/run/secrets/kubernetes.io/serviceaccount/ca-bundle
+              name: vault-cabundle
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: app-creds
+              mountPath: /etc/app
+            - name: vault-token
+              mountPath: /etc/vault
+          terminationMessagePolicy: File
+          serviceAccount: default
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 3
+            timeoutSeconds: 3
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          terminationMessagePath: /dev/termination-log
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 30
+            timeoutSeconds: 3
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+      volumes:
+        - name: app-creds
+          emptyDir: {}
+        - name: vault-token
+          emptyDir: {}
+        - configMap:
+          name: vault-cabundle
+      dnsPolicy: ClusterFirst

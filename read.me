@@ -1,0 +1,301 @@
+
+========================== INSTALACIÓN DE VAULT ==========================
+oc new-project hashicorp
+
+git clone https://github.com/ferluko/hashicorp-vault-for-openshift.git
+
+sudo ./nfs.sh 
+>/exports/vault-storage
+exit
+
+oc create sa vault-auth
+oc adm policy add-cluster-role-to-user system:auth-delegator -z vault-auth
+
+oc apply -f ./vault/standalone/install/
+
+POD=$(oc get pods -lapp.kubernetes.io/name=vault --no-headers -o custom-columns=NAME:.metadata.name)
+oc rsh $POD
+
+//// dentro del pod de vault /////
+vault operator init --tls-skip-verify -key-shares=1 -key-threshold=1
+
+Save the Unseal Key 1 and the Initial Root Token:
+Unseal Key 1: n4Ju98iDxJXhNLVNgNHSGA+/C0m+SB9wE/BCdTRMmMg=
+Initial Root Token: s.JmItROuk2vfOrA1u9UmTReqY
+
+export KEYS=n4Ju98iDxJXhNLVNgNHSGA+/C0m+SB9wE/BCdTRMmMg=
+export ROOT_TOKEN=s.JmItROuk2vfOrA1u9UmTReqY
+export VAULT_TOKEN=$ROOT_TOKEN
+
+vault operator unseal --tls-skip-verify $KEYS
+
+~ $ vault operator unseal --tls-skip-verify $KEYS
+Key             Value
+---             -----
+Seal Type       shamir
+Initialized     true
+Sealed          false
+Total Shares    1
+Threshold       1
+Version         1.3.2
+Cluster Name    vault-cluster-a1531371
+Cluster ID      1c6d4c42-d82b-411d-9e8c-363f92e52ee4
+HA Enabled      false
+
+
+exit
+
+=============================== INSTALACIÓN VAULT INJECT (dentro project hashicorp) ==========================
+COMPLETAR...
+
+oc apply -f vault/injector/install/
+
+
+=============================== CONFIGURACIÓN DE VAULT PARA TODOS LOS ESCENARIOS(dentro project hashicorp) ==========================
+oc project hashicorp
+
+secret=`oc describe sa vault-auth | grep 'Tokens:' | awk '{print $2}'`
+token=`oc describe secret $secret | grep 'token:' | awk '{print $2}'`
+pod=`oc get pods | grep vault | awk '{print $1; exit}'`
+oc exec $pod -- cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt > ca.crt
+
+export VAULT_TOKEN=$ROOT_TOKEN
+export VAULT_ADDR=https://`oc get route | grep -m1 vault | awk '{print $2}'`
+
+vault auth enable -tls-skip-verify kubernetes
+vault write -tls-skip-verify auth/kubernetes/config token_reviewer_jwt=$token kubernetes_host=https://kubernetes.default.svc:443 kubernetes_ca_cert=@ca.crt
+
+vault read -tls-skip-verify auth/kubernetes/config
+rm ca.crt
+
+================================ BUILD ESCENARIO 1 ==========================
+oc new-project vault-app
+oc create -f escenario1/010-deploy-secret-mongodb-service.yaml //no inicializa la base con los secretos obtenidos del init container (/deployments/config/application.properties)
+
+=============================== CONFIGURACIÓN DE VAULT PARA ESCENARIO 1(A realizar por seguridad informatica) ==========================
+
+Datos de Vault:
+	Policy: policy-example
+	Role: demo
+	Path secretos: secret/mongodb
+	Tipo: KV v1
+	SA: default
+	Tipo de Auth: K8s
+	
+vault secrets enable -tls-skip-verify -version=1 -path=secret/ kv
+
+vault policy write -tls-skip-verify policy-example policy-example.hcl
+
+path "secret/mongodb" {
+  capabilities = ["read", "list"]
+}
+
+vault write -tls-skip-verify auth/kubernetes/role/demo bound_service_account_names=default bound_service_account_namespaces='*' policies=policy-example ttl=24h
+
+vault read -tls-skip-verify auth/kubernetes/role/demo
+Key                                 Value
+---                                 -----
+bound_service_account_names         [default]
+bound_service_account_namespaces    [*]
+policies                            [policy-example]
+token_bound_cidrs                   []
+token_explicit_max_ttl              0s
+token_max_ttl                       0s
+token_no_default_policy             false
+token_num_uses                      0
+token_period                        0s
+token_policies                      [policy-example]
+token_ttl                           24h
+token_type                          default
+ttl                                 24h
+
+vault write -tls-skip-verify secret/mongodb user="$(oc get secret/mongodb -o jsonpath="{.data.MONGODB_USERNAME}" | base64 -d )" password="$(oc get secret/mongodb -o jsonpath="{.data.MONGODB_PASSWORD}" | base64 -d )"   //estamos agregandos los mismos secretos de kubernetes pero seguridad info. deberia crear los secretos, no leerlos!!
+
+vault read -tls-skip-verify secret/mongodb
+Key                 Value
+---                 -----
+refresh_interval    168h
+password            password
+user                admin
+
+================================ ARMAR ESCENARIO 1 - PROBAR AUTH K8S CON VAULT==========================
+oc project vault-app
+
+secret=`oc describe sa default | grep 'Tokens:' | awk '{print $2}'`
+token=`oc describe secret $secret | grep 'token:' | awk '{print $2}'`
+vault write -tls-skip-verify auth/kubernetes/login role=demo jwt=$token
+
+Key                                       Value
+---                                       -----
+token                                     s.Mx3brVu6uk6yMJGC6R74Yf8K
+token_accessor                            AceKHeY7HIGUKCUfdUK8M69g
+token_duration                            24h
+token_renewable                           true
+token_policies                            ["default" "policy-example"]
+identity_policies                         []
+policies                                  ["default" "policy-example"]
+token_meta_service_account_name           default
+token_meta_service_account_namespace      vault-app
+token_meta_service_account_secret_name    default-token-qpfwq
+token_meta_service_account_uid            944b7f2f-2e1b-44e3-ba2a-ed4dec0cd528
+token_meta_role                           demo
+ 
+
+oc new-build https://github.com/ferluko/appointment.git --name vault-app-api
+oc create -f escenario1/020-deployConfig-api.yaml
+oc expose svc vault-app-api
+
+
+=============================== CONFIGURACIÓN DE VAULT PARA ESCENARIO 2(A realizar por seguridad informatica) ==========================
+
+Datos de Vault:
+	Policy: vault-app-policy-dynamic
+	Role: vault-app-mongodb-role
+	Path secretos: database/creds/vault-app-mongodb-role
+	Tipo: Database (Mongodb plugin)
+	SA: default
+	Tipo de Auth: K8s
+
+vault secrets enable -tls-skip-verify database
+
+vault write -tls-skip-verify database/config/vault-app-mongodb \
+   plugin_name=mongodb-database-plugin \
+   allowed_roles="vault-app-mongodb-role" \
+   connection_url="mongodb://{{username}}:{{password}}@mongodb.vault-app.svc.cluster.local:27017/admin" \
+   username="admin" \
+   password="$(oc get secret/mongodb -o jsonpath="{.data.MONGODB_ROOT_PASSWORD}" | base64 -d )"
+   
+vault read -tls-skip-verify database/config/vault-app-mongodb
+Key                                   Value
+---                                   -----
+allowed_roles                         [vault-app-mongodb-role]
+connection_details                    map[connection_url:mongodb://{{username}}:{{password}}@mongodb.vault-app.svc.cluster.local:27017/admin username:admin]
+plugin_name                           mongodb-database-plugin
+root_credentials_rotate_statements    []
+
+vault write -tls-skip-verify database/roles/vault-app-mongodb-role \
+   db_name=vault-app-mongodb \
+   creation_statements='{ "db": "sampledb", "roles": [{"role": "readWrite", "db": "sampledb"}] }' \
+   default_ttl="1h" \
+   max_ttl="24h" \
+   revocation_statements='{ "db": "sampledb" }'
+
+vault read -tls-skip-verify database/roles/vault-app-mongodb-role
+Key                      Value
+---                      -----
+creation_statements      [{ "db": "sampledb", "roles": [{"role": "readWrite", "db": "sampledb"}] }]
+db_name                  vault-app-mongodb
+default_ttl              1h
+max_ttl                  24h
+renew_statements         []
+revocation_statements    [{ "db": "sampledb" }]
+rollback_statements      []
+
+	
+vault policy write -tls-skip-verify vault-app-policy-dynamic vault-app-dynamic-secrets-policy.hcl  //crear politica
+path "database/creds/vault-app-mongodb-role" {
+  capabilities = ["read"]
+}
+path "sys/leases/renew" {
+  capabilities = ["create"]
+}
+path "sys/leases/revoke" {
+  capabilities = ["update"]
+}	
+
+vault write -tls-skip-verify auth/kubernetes/role/vault-app-mongodb-role bound_service_account_names=default bound_service_account_namespaces='*' policies=vault-app-policy-dynamic ttl=24h  //se crea el role vault-app-mongodb-role de auth kubernetes para la politica vault-app-policy-dynamic
+
+vault read -tls-skip-verify auth/kubernetes/role/vault-app-mongodb-role
+
+Key                                 Value
+---                                 -----
+bound_service_account_names         [default]
+bound_service_account_namespaces    [*]
+policies                            [vault-app-policy-dynamic]
+token_bound_cidrs                   []
+token_explicit_max_ttl              0s
+token_max_ttl                       0s
+token_no_default_policy             false
+token_num_uses                      0
+token_period                        0s
+token_policies                      [vault-app-policy-dynamic]
+token_ttl                           24h
+token_type                          default
+ttl                                 24h
+
+================================ ARMAR ESCENARIO 2 (A realizar por devops)==========================
+oc label namespace vault-app vault.hashicorp.com/agent-webhook=enabled
+
+oc apply -f escenario2/020-deployConfig-api.yaml
+
+vault read -format json database/creds/vault-app-mongodb-role     //mostrar que por cada read (en vault) se crea un secreto diferente
+{
+  "request_id": "857a4353-d07f-eb19-0060-8d65614f43e2",
+  "lease_id": "database/creds/vault-app-mongodb-role/GvmCJQIcbpVKp4mC1UY8h9y0",
+  "lease_duration": 3600,
+  "renewable": true,
+  "data": {
+    "password": "A1a-ti4kJph63jpbcaqQ",
+    "username": "v-root-vault-app-mongo-NVPv6fQMPTkJAB15FcSp-1588254042"
+  },
+  "warnings": null
+}
+
+
+mongodb://admin:adminpassword@127.0.0.1:27017/sampledb
+
+
+
+
+Injecting Vault secrets into Pods via a sidecar: To enable access to Vault secrets by applications that don’t have native Vault logic built-in, this feature will allow automatic injection of secrets into the pod file system for static and dynamic secrets. This will allow applications to only concern themselves with finding a secret at a filesystem path, rather than managing the auth tokens and other mechanisms for direct interaction with Vault. This feature will be made available as an option through our Helm chart. This feature has been released and supports secret injection via init and sidecar container
+
+https://www.hashicorp.com/blog/injecting-vault-secrets-into-kubernetes-pods-via-a-sidecar/
+
+We are excited to announce a new Kubernetes integration that enables applications with no native HashiCorp Vault logic built-in to leverage static and dynamic secrets sourced from Vault. This is powered by a new tool called vault-k8s, which leverages the Kubernetes Mutating Admission Webhook to intercept and augment specifically annotated pod configuration for secrets injection using Init and Sidecar containers.
+
+Applications need only concern themselves with finding a secret at a filesystem path, rather than managing tokens, connecting to an external API, or other mechanisms for direct interaction with Vault.
+
+https://www.vaultproject.io/docs/platform/k8s/injector/annotations
+
+https://www.youtube.com/watch?v=xUuJhgDbUJQ
+
+https://github.com/nicholasjackson/demo-vault/tree/master/dynamic-secrets-k8s
+
+
+
+
+
+
+
+
+vault kv put -tls-skip-verify secret/vault-app-mongodb user=$(oc get secret/vault-app-mongodb  -o  jsonpath="{.data.DATABASE_USER}" | base64 -d) password=$(oc get secret/vault-app-mongodb -o  jsonpath="{.data.DATABASE_PASSWORD}")
+
+
+
+//dentro del init container
+
+initContainers:
+- name: vault-init
+  image: quay.io/lbroudoux/ubi8:latest   //usar registry local o de RH
+  command:
+   - "sh"
+   - "-c"
+   - >
+   OCP_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token);
+   curl -k --request POST --data '{"jwt": "'"$$OCP_TOKEN"'", "role": "demo"}' https://vault-hashicorp.apps.ocp4.labs.semperti.local/v1/auth/kubernetes/login | jq -j '.auth.client_token' > /etc/vault/token
+   X_VAULT_TOKEN=$(cat /etc/vault/token);
+   curl -k --header "X-Vault-Token:$X_VAULT_TOKEN" https://vault-hashicorp.apps.ocp4.labs.semperti.local/v1/secret/vault-test-poc-project-mongodb > /etc/app/creds.json
+   echo "spring.data.mongodb.uri=mongodb://$(jq -j '.data.user' /etc/app/creds.json):$(jq -j '.data.password' /etc/app/creds.json)@mongodb/sampledb" > /etc/app/application.properties;
+   cp /etc/app/application.properties /deployments/config/application.properties
+  
+  
+  
+  volumeMounts:
+  - name: app-creds
+  mountPath: /etc/app
+  - name: vault-token
+  mountPath: /etc/vault
+  - name: app-config
+  mountPath: /deployments/config 
+
+

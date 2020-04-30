@@ -1,0 +1,15 @@
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+ name: vault-storage 
+ labels:
+  app: vault
+spec:
+ capacity:
+  storage: 10Gi
+ accessModes:
+ - ReadWriteOnce
+ nfs:
+  path: /exports/vault-storage
+  server: bastion.ocp4.labs.semperti.local
+ persistentVolumeReclaimPolicy: Retain

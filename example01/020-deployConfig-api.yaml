@@ -1,0 +1,170 @@
+kind: DeploymentConfig
+apiVersion: apps.openshift.io/v1
+metadata:
+  annotations:
+    description: Defines how to deploy the application server
+    template.alpha.openshift.io/wait-for-ready: 'true'
+  resourceVersion: '6677487'
+  name: vault-app-api
+  namespace: vault-app
+  labels:
+    app: vault-app-api
+spec:
+  strategy:
+    type: Recreate
+    resources: {}
+    activeDeadlineSeconds: 21600
+  triggers:
+    - type: ImageChange
+      imageChangeParams:
+        automatic: true
+        containerNames:
+          - vault-app-api
+        from:
+          kind: ImageStreamTag
+          namespace: vault-app
+          name: 'vault-app-api:latest'
+    - type: ConfigChange
+  replicas: 1
+  revisionHistoryLimit: 10
+  test: false
+  selector:
+    name: vault-app-api
+  template:
+    metadata:
+      name: vault-app-api
+      labels:
+        name: vault-app-api
+    spec:
+      restartPolicy: Always
+      initContainers:
+        - name: vault-init
+          image: 'quay.io/lbroudoux/ubi8:latest'
+          command:
+            - sh
+            - '-c'
+            - >
+              OCP_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token);
+              cat $OCP_TOKEN;
+              curl -k --request POST --data '{"jwt": "'"$OCP_TOKEN"'", "role": "demo"}' https://vault-hashicorp.apps.ocp4.labs.semperti.local/v1/auth/kubernetes/login | jq -j '.auth.client_token' > /etc/vault/token;
+              X_VAULT_TOKEN=$(cat /etc/vault/token);
+              cat $X_VAULT_TOKEN;
+              curl -k --header "X-Vault-Token:$X_VAULT_TOKEN" https://vault-hashicorp.apps.ocp4.labs.semperti.local/v1/secret/mongodb > /etc/app/creds.json;
+              cat /etc/app/creds.json;
+              echo "const config = {db: { SECRET: '$(jq -j '.data.user' /etc/app/creds.json):$(jq -j '.data.password' /etc/app/creds.json)' }};module.exports = config;" >       /etc/app/application.properties;
+              cp /etc/app/application.properties /deployments/config/application.properties;
+              cat /deployments/config/application.properties
+          resources: {}
+          volumeMounts:
+            - name: app-creds
+              mountPath: /etc/app
+            - name: vault-token
+              mountPath: /etc/vault
+            - name: app-config
+              mountPath: /deployments/config
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: Always
+      serviceAccountName: default
+      schedulerName: default-scheduler
+      terminationGracePeriodSeconds: 30
+      securityContext: {}
+      containers:
+        - resources:
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 3
+            timeoutSeconds: 3
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          terminationMessagePath: /dev/termination-log
+          name: vault-app-api
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 30
+            timeoutSeconds: 3
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          env:
+            - name: DATABASE_SERVICE_NAME
+              value: mongodb
+            - name: USER
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb
+                  key: MONGODB_USERNAME
+            - name: PASS
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb
+                  key: MONGODB_PASSWORD
+            - name: DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb
+                  key: MONGODB_DATABASE
+            - name: MONGODB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb
+                  key: MONGODB_ROOT_PASSWORD
+            - name: IP
+              value: mongodb
+            - name: PORT
+              value: '27017'
+            - name: PROPPATH
+              value: /deployments/config/application.properties
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: app-creds
+              mountPath: /etc/app
+            - name: vault-token
+              mountPath: /etc/vault
+            - name: app-config
+              mountPath: /deployments/config
+          terminationMessagePolicy: File
+          image: image-registry.openshift-image-registry.svc:5000/vault-app/vault-app-api
+      serviceAccount: default
+      volumes:
+        - name: app-creds
+          emptyDir: {}
+        - name: app-config
+          emptyDir: {}
+        - name: vault-token
+          emptyDir: {}
+      dnsPolicy: ClusterFirst
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: vault-app-api
+  namespace: vault-app
+  labels:
+    app: vault-app-api
+    template: vault-app-api
+spec:
+  ports:
+    - name: web
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+  selector:
+    name: vault-app-api
+  type: ClusterIP
+  sessionAffinity: None
+status:
+  loadBalancer: {}

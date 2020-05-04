@@ -1,0 +1,113 @@
+kind: DeploymentConfig
+apiVersion: apps.openshift.io/v1
+metadata:
+  annotations:
+    template.alpha.openshift.io/wait-for-ready: 'true'
+  name: vault-app-api
+  namespace: vault-app
+  labels:
+    app: vault-app-api
+spec:
+  strategy:
+    type: Recreate
+    resources: {}
+    activeDeadlineSeconds: 21600
+  triggers:
+    - type: ImageChange
+      imageChangeParams:
+        automatic: true
+        containerNames:
+          - vault-app-api
+        from:
+          kind: ImageStreamTag
+          namespace: vault-app
+          name: 'vault-app-api:latest'
+    - type: ConfigChange
+  replicas: 1
+  revisionHistoryLimit: 10
+  test: false
+  selector:
+    name: vault-app-api
+  template:
+    metadata:
+      name: vault-app-api
+      labels:
+        name: vault-app-api
+    spec:
+      restartPolicy: Always
+      containers:
+        - resources:
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 3
+            timeoutSeconds: 3
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          terminationMessagePath: /dev/termination-log
+          name: vault-app-api
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 30
+            timeoutSeconds: 3
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          env:
+            - name: MONGODB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb
+                  key: MONGODB_USERNAME
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb
+                  key: MONGODB_PASSWORD
+            - name: MONGO_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb
+                  key: MONGODB_DATABASE
+            - name: IP
+              value: mongodb
+            - name: PORT
+              value: '27017'
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          imagePullPolicy: IfNotPresent
+          terminationMessagePolicy: File
+          image: image-registry.openshift-image-registry.svc:5000/vault-app/vault-app-api
+      serviceAccount: default
+      dnsPolicy: ClusterFirst
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: vault-app-api
+  namespace: vault-app
+  labels:
+    app: vault-app-api
+    template: vault-app-api
+spec:
+  ports:
+    - name: web
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+  selector:
+    name: vault-app-api
+  type: ClusterIP
+  sessionAffinity: None
+status:
+  loadBalancer: {}

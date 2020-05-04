@@ -1,4 +1,14 @@
 
+================================ DESPLIEGUE DE MONGODB Y SECRETOS PARA TODOS LOS ESCENARIOS ===========================================
+oc new-project vault-app
+oc create -f mongodb/010-deploy-secret-mongodb-service.yaml //inicializa la base con las var env obtenidas de los secretos de k8s
+
+================================ BUILD ESCENARIO 0 (escenario original) ==========================
+
+oc new-build https://github.com/ferluko/ocp-vault-poc.git#original --name vault-app-api
+oc create -f https://github.com/ferluko/ocp-vault-poc/example00/020-deployConfig-api.yaml
+oc expose svc vault-app-api
+
 ========================== INSTALACIÓN DE VAULT ==========================
 oc new-project hashicorp
 
@@ -13,7 +23,7 @@ oc adm policy add-cluster-role-to-user system:auth-delegator -z vault-auth
 
 oc apply -f ./vault/standalone/install/
 
-POD=$(oc get pods -lapp.kubernetes.io/name=vault --no-headers -o custom-columns=NAME:.metadata.name)
+POD=$(oc get pods -l app.kubernetes.io/name=vault --no-headers -o custom-columns=NAME:.metadata.name)
 oc rsh $POD
 
 //// dentro del pod de vault /////
@@ -67,10 +77,6 @@ vault write -tls-skip-verify auth/kubernetes/config token_reviewer_jwt=$token ku
 
 vault read -tls-skip-verify auth/kubernetes/config
 rm ca.crt
-
-================================ BUILD ESCENARIO 1 ==========================
-oc new-project vault-app
-oc create -f escenario1/010-deploy-secret-mongodb-service.yaml //no inicializa la base con los secretos obtenidos del init container (/deployments/config/application.properties)
 
 =============================== CONFIGURACIÓN DE VAULT PARA ESCENARIO 1(A realizar por seguridad informatica) ==========================
 

@@ -72,7 +72,7 @@ spec:
                 secretKeyRef:
                   name: mongodb
                   key: MONGODB_PASSWORD
-            - name: MONGO_DATABASE
+            - name: MONGODB_DATABASE
               valueFrom:
                 secretKeyRef:
                   name: mongodb

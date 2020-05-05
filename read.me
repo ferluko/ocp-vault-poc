@@ -1,4 +1,6 @@
 
+git clone git@github.com:ferluko/ocp-vault-poc.git
+cd ocp-vault-poc
 ================================ DESPLIEGUE DE MONGODB Y SECRETOS PARA TODOS LOS ESCENARIOS ===========================================
 oc new-project vault-app
 oc create -f mongodb/010-deploy-secret-mongodb-service.yaml //inicializa la base con las var env obtenidas de los secretos de k8s

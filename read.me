@@ -7,9 +7,12 @@ oc new-project vault-app
 oc create -f mongodb/010-deploy-secret-mongodb-service.yaml //inicializa la base con las var env obtenidas de los secretos de k8s
 
 ================================ BUILD ESCENARIO 0 (escenario original) ==========================
-oc new-build https://github.com/ferluko/ocp-vault-poc.git#original --name vault-app-api //branch "original2
+oc new-build https://github.com/ferluko/ocp-vault-poc.git --context-dir appointment --name vault-app-api //branch "master" y carpeta "appointment"
+watch oc status --suggest
 oc create -f example00/020-deployConfig-api.yaml
-oc expose svc vault-app-api
+  oc expose svc vault-app-api
+
+// http://vault-app-api-vault-app.apps.ocp4.labs.semperti.local/api-docs/
 
 ========================== INSTALACIÓN DE VAULT ==========================
 oc new-project hashicorp
@@ -127,7 +130,9 @@ user                admin
 
 ================================ ARMAR ESCENARIO 1 - PROBAR AUTH K8S CON VAULT==========================
 oc project vault-app
-oc delete all -l build=vault-app-api,app=vault-app-api
+oc delete all -l build=vault-app-api
+oc delete all -l app=vault-app-api
+oc get all //verificar que solo queden los ojbetos de mongodb
 
 secret=`oc describe sa default | grep 'Tokens:' | awk '{print $2}'`
 token=`oc describe secret $secret | grep 'token:' | awk '{print $2}'`
@@ -149,8 +154,8 @@ token_meta_service_account_uid            944b7f2f-2e1b-44e3-ba2a-ed4dec0cd528
 token_meta_role                           demo
  
 
-oc new-build https://github.com/ferluko/ocp-vault-poc.git --name vault-app-api
-oc apply -f example02/020-deployConfig-api.yaml
+oc new-build https://github.com/ferluko/ocp-vault-poc.git#vault --context-dir appointment --name vault-app-api
+oc apply -f example01/020-deployConfig-api.yaml
 oc expose svc vault-app-api
 
 
@@ -234,9 +239,10 @@ ttl                                 24h
 ================================ ARMAR ESCENARIO 2 (A realizar por devops)==========================
 oc label namespace vault-app vault.hashicorp.com/agent-webhook=enabled
 
-oc apply -f escenario2/020-deployConfig-api.yaml
+oc delete dc vault-app-api
+oc create -f example02/020-deployConfig-Vault-app-api-Inject.yaml
 
-vault read -format json database/creds/vault-app-mongodb-role     //mostrar que por cada read (en vault) se crea un secreto diferente
+vault read -tls-skip-verify -format json database/creds/vault-app-mongodb-role     //mostrar que por cada read (en vault) se crea un secreto diferente
 {
   "request_id": "857a4353-d07f-eb19-0060-8d65614f43e2",
   "lease_id": "database/creds/vault-app-mongodb-role/GvmCJQIcbpVKp4mC1UY8h9y0",
@@ -268,42 +274,3 @@ https://www.vaultproject.io/docs/platform/k8s/injector/annotations
 https://www.youtube.com/watch?v=xUuJhgDbUJQ
 
 https://github.com/nicholasjackson/demo-vault/tree/master/dynamic-secrets-k8s
-
-
-
-
-
-
-
-
-vault kv put -tls-skip-verify secret/vault-app-mongodb user=$(oc get secret/vault-app-mongodb  -o  jsonpath="{.data.DATABASE_USER}" | base64 -d) password=$(oc get secret/vault-app-mongodb -o  jsonpath="{.data.DATABASE_PASSWORD}")
-
-
-
-//dentro del init container
-
-initContainers:
-- name: vault-init
-  image: quay.io/lbroudoux/ubi8:latest   //usar registry local o de RH
-  command:
-   - "sh"
-   - "-c"
-   - >
-   OCP_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token);
-   curl -k --request POST --data '{"jwt": "'"$$OCP_TOKEN"'", "role": "demo"}' https://vault-hashicorp.apps.ocp4.labs.semperti.local/v1/auth/kubernetes/login | jq -j '.auth.client_token' > /etc/vault/token
-   X_VAULT_TOKEN=$(cat /etc/vault/token);
-   curl -k --header "X-Vault-Token:$X_VAULT_TOKEN" https://vault-hashicorp.apps.ocp4.labs.semperti.local/v1/secret/vault-test-poc-project-mongodb > /etc/app/creds.json
-   echo "spring.data.mongodb.uri=mongodb://$(jq -j '.data.user' /etc/app/creds.json):$(jq -j '.data.password' /etc/app/creds.json)@mongodb/sampledb" > /etc/app/application.properties;
-   cp /etc/app/application.properties /deployments/config/application.properties
-  
-  
-  
-  volumeMounts:
-  - name: app-creds
-  mountPath: /etc/app
-  - name: vault-token
-  mountPath: /etc/vault
-  - name: app-config
-  mountPath: /deployments/config 
-
-

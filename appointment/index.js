@@ -9,9 +9,9 @@ const express = require('express'),
   swaggerDocument = require('./swagger.json'),
   appointment = require('./models/appointment');
 
-//const propPath = process.env.PROPPATH;
-//const config = require(propPath);
-const secret = process.env.MONGODB_USERNAME + ':' + process.env.MONGODB_PASSWORD;
+const propPath = process.env.PROPPATH;
+const config = require(propPath);
+//const secret = process.env.MONGODB_USERNAME + ':' + process.env.MONGODB_PASSWORD;
 
 app.use(bodyParser.urlencoded({extended: true}));
 app.use(bodyParser.json());
@@ -21,18 +21,17 @@ app.use(cookieParser());
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-/*const secret = config.db.SECRET || process.env.USER + ':' + process.env.PASSWORD,
+const secret = config.db.SECRET,
 	ip = process.env.IP,
-	port = process.env.PORT,
-	database = process.env.DATABASE,
+	database = process.env.MONGODB_DATABASE,
 	connstring = 'mongodb://' + secret + '@' + ip + '/' + database;
-*/
+/*
 const ip = process.env.IP,
       database = process.env.MONGODB_DATABASE,
 	  connstring = 'mongodb://' + secret + '@' + ip + '/' + database;
 
 console.log(connstring);
-
+*/
 mongoose.connect(connstring, {useNewUrlParser: true}, function (error) {
   if (error) {
     console.log(error);

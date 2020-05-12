@@ -1,14 +1,14 @@
 
 git clone git@github.com:ferluko/ocp-vault-poc.git
 cd ocp-vault-poc
-================================ DESPLIEGUE DE MONGODB Y SECRETOS PARA TODOS LOS ESCENARIOS ===========================================
+
+======= DESPLIEGUE DE MONGODB Y SECRETOS K8S de Mongodb PARA TODOS LOS ESCENARIOS  ===============
 oc new-project vault-app
 oc create -f mongodb/010-deploy-secret-mongodb-service.yaml //inicializa la base con las var env obtenidas de los secretos de k8s
 
 ================================ BUILD ESCENARIO 0 (escenario original) ==========================
-
-oc new-build https://github.com/ferluko/ocp-vault-poc.git#original --name vault-app-api
-oc create -f https://github.com/ferluko/ocp-vault-poc/example00/020-deployConfig-api.yaml
+oc new-build https://github.com/ferluko/ocp-vault-poc.git#original --name vault-app-api //branch "original2
+oc create -f example00/020-deployConfig-api.yaml
 oc expose svc vault-app-api
 
 ========================== INSTALACIÓN DE VAULT ==========================
@@ -16,7 +16,7 @@ oc new-project hashicorp
 
 git clone https://github.com/ferluko/hashicorp-vault-for-openshift.git
 
-sudo ./nfs.sh 
+sudo ./nfs.sh (desde nodo bastion de ser necesario un nuevo export nfs > pv)
 >/exports/vault-storage
 exit
 
@@ -53,7 +53,6 @@ Version         1.3.2
 Cluster Name    vault-cluster-a1531371
 Cluster ID      1c6d4c42-d82b-411d-9e8c-363f92e52ee4
 HA Enabled      false
-
 
 exit
 
@@ -128,6 +127,7 @@ user                admin
 
 ================================ ARMAR ESCENARIO 1 - PROBAR AUTH K8S CON VAULT==========================
 oc project vault-app
+oc delete all -l build=vault-app-api,app=vault-app-api
 
 secret=`oc describe sa default | grep 'Tokens:' | awk '{print $2}'`
 token=`oc describe secret $secret | grep 'token:' | awk '{print $2}'`
@@ -149,8 +149,8 @@ token_meta_service_account_uid            944b7f2f-2e1b-44e3-ba2a-ed4dec0cd528
 token_meta_role                           demo
  
 
-oc new-build https://github.com/ferluko/appointment.git --name vault-app-api
-oc create -f escenario1/020-deployConfig-api.yaml
+oc new-build https://github.com/ferluko/ocp-vault-poc.git --name vault-app-api
+oc apply -f example02/020-deployConfig-api.yaml
 oc expose svc vault-app-api
 
 

@@ -89,7 +89,7 @@ spec:
               value: '27017'
             - name: PROPPATH
               value: /deployments/config/application.properties
-            - name: DATABASE
+            - name: MONGODB_DATABASE
               valueFrom:
                 secretKeyRef:
                   name: mongodb

@@ -98,17 +98,17 @@ spec:
           env:
             - name: DATABASE_SERVICE_NAME
               value: mongodb
-            - name: USER
+            - name: MONGODB_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: mongodb
                   key: MONGODB_USERNAME
-            - name: PASS
+            - name: MONGODB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: mongodb
                   key: MONGODB_PASSWORD
-            - name: DATABASE
+            - name: MONGODB_DATABASE
               valueFrom:
                 secretKeyRef:
                   name: mongodb

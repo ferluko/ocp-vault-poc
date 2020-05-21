@@ -1,5 +1,5 @@
 
-git clone git@github.com:ferluko/ocp-vault-poc.git
+git clone https://github.com/ferluko/ocp-vault-poc.git
 cd ocp-vault-poc
 
 ======= DESPLIEGUE DE MONGODB Y SECRETOS K8S de Mongodb PARA TODOS LOS ESCENARIOS  ===============
@@ -16,8 +16,9 @@ oc expose svc vault-app-api
 
 ========================== INSTALACIÓN DE VAULT ==========================
 oc new-project hashicorp
-
+cd ..
 git clone https://github.com/ferluko/hashicorp-vault-for-openshift.git
+cd hashicorp-vault-for-openshift
 
 sudo ./nfs.sh (desde nodo bastion de ser necesario un nuevo export nfs > pv)
 >/exports/vault-storage

@@ -82,7 +82,7 @@ spec:
             - name: PORT
               value: '27017'
             - name: PROPPATH
-              value: /deployments/config/application.properties
+              value: ./application.properties
           ports:
             - containerPort: 8080
               protocol: TCP

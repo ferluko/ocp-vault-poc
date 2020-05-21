@@ -8,9 +8,9 @@ oc create -f mongodb/010-deploy-secret-mongodb-service.yaml //inicializa la base
 
 ================================ BUILD ESCENARIO 0 (escenario original) ==========================
 oc new-build https://github.com/ferluko/ocp-vault-poc.git --context-dir appointment --name vault-app-api //branch "master" y carpeta "appointment"
-watch oc status --suggest
+watch oc status --suggest   ||  oc logs -f vault-app-api-1-build   
 oc create -f example00/020-deployConfig-api.yaml
-  oc expose svc vault-app-api
+oc expose svc vault-app-api
 
 // http://vault-app-api-vault-app.apps.ocp4.labs.semperti.local/api-docs/
 
@@ -130,7 +130,7 @@ user                admin
 
 ================================ ARMAR ESCENARIO 1 - PROBAR AUTH K8S CON VAULT==========================
 oc project vault-app
-oc delete all -l build=vault-app-api
+// oc delete all -l build=vault-app-api
 oc delete all -l app=vault-app-api
 oc get all //verificar que solo queden los ojbetos de mongodb
 
@@ -154,7 +154,7 @@ token_meta_service_account_uid            944b7f2f-2e1b-44e3-ba2a-ed4dec0cd528
 token_meta_role                           demo
  
 
-oc new-build https://github.com/ferluko/ocp-vault-poc.git#vault --context-dir appointment --name vault-app-api
+oc new-build https://github.com/ferluko/ocp-vault-poc.git --context-dir appointment --name vault-app-api
 oc apply -f example01/020-deployConfig-api.yaml
 oc expose svc vault-app-api
 

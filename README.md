@@ -35,7 +35,10 @@ oc create -f mongodb/010-deploy-secret-mongodb-service.yaml
 Para el **build** de la aplicación utilizamos el código que se encuenta en la carpeta **appointment** del repositorio (branch **Master**) y la llamamos ```vault-app-api```
 
 ```oc new-build https://github.com/ferluko/ocp-vault-poc.git --context-dir appointment --name vault-app-api```
-Observar el progreso con ```watch oc status --suggest``` o con ```oc logs -f vault-app-api-1-build```
+Observar el progreso con 
+```watch oc status --suggest``` 
+o con
+ ```oc logs -f vault-app-api-1-build```
 
 A continuación desplegamos la aplicación ```vault-app-api``` con la imagen del último **build**. Las credenciales, el nombre de la base, IP y puerto que serán del string de conexión a MongoDB serán provistos por **variables de entorno** utilizando los **Secretos de K8s** , los mismos que previamente fueron utilizados para inialización de la misma base de datos. De esta forma representamos un escenario original donde los secretos de una aplicacion (string de conexión) son variables de entorno, es decir secretos de K8s.
 ``` 
@@ -43,7 +46,8 @@ oc create -f example00/020-deployConfig-api.yaml
 oc expose svc vault-app-api
 oc status --suggest
 ```
-_NOTA: A modo ejemplo de esta PoC se pueden observar los logs del POD de la aplicación donde se muestra por consola el string de conexión a la base de datos ```oc logs -f vault-app-api```_
+_NOTA: A modo ejemplo de esta PoC se pueden observar los logs del POD de la aplicación donde se muestra por consola el string de conexión a la base de datos
+```oc logs -f vault-app-api```_
 
 URL para probar la APP: http://vault-app-api-vault-app.apps.ocp4.labs.semperti.local/api-docs/ 
 Utilizando Swagger podemos simular el uso de esta API realizando varios POST comprobando la conexión a la base de datos.
@@ -149,14 +153,111 @@ vault read -tls-skip-verify auth/kubernetes/config
 rm ca.crt
 ```
 
-## CONFIGURACIÓN DE VAULT PARA ESCENARIO 1
+## ESCENARIO 1: VAULT API CALL - INIT CONTAINER
+
+### Configuración de Vault para el escenario 1
 > _A realizar por seguridad informatica_
 
 **_Datos de Vault:_**
-    **Policy:** policy-example
-    **Role:** demo
-    **Path secretos:** secret/mongodb
-    **Tipo:** KV v1
-    **SA:** default
-    **Tipo de Auth:** K8s
+**Policy:** policy-example
+**Role:** demo
+**Path secretos:** secret/mongodb
+**Tipo:** KV v1
+**SA:** default
+**Tipo de Auth:** K8s
 
+A continuación estamos habilitando el **Engine Key/Value (KV)** en el path `secret/mongodb` y le asignamos una política `policy-example` con capacidades de _Read_ y _List_ en el `path` mencionado.
+```
+vault secrets enable -tls-skip-verify -version=1 -path=secret/mongodb kv
+vault policy write -tls-skip-verify policy-example ./policy/policy-example.hcl
+``` 
+
+Contenido del archivo `./policy/policy-example.hcl`:
+```
+path "secret/mongodb" {
+  capabilities = ["read", "list"]
+}
+```
+
+Con el siguiente comando estamos configurando en Vault el **role** `demo` con el **Kubernetes Auth Method** para la pólitica `policy-example` con un _Time-to-Live (TTL)_ de 24 horas.
+``` 
+vault write -tls-skip-verify auth/kubernetes/role/demo bound_service_account_names=default bound_service_account_namespaces='*' policies=policy-example ttl=24h
+```
+Leemos con el comando  `vault read`  lo que acabamos de configurar:
+```
+vault read -tls-skip-verify auth/kubernetes/role/demo
+
+Key                                 Value
+---                                 -----
+bound_service_account_names         [default]
+bound_service_account_namespaces    [*]
+policies                            [policy-example]
+token_bound_cidrs                   []
+token_explicit_max_ttl              0s
+token_max_ttl                       0s
+token_no_default_policy             false
+token_num_uses                      0
+token_period                        0s
+token_policies                      [policy-example]
+token_ttl                           24h
+token_type                          default
+ttl                                 24h
+```
+
+Para la realización de la PoC vamos a leer (copiar) los secretos desde k8s y llevarlos a Vault, pero en un **entorno real** el departamento _Seguridad Informatica_ deberia crear los secretos en el **path**: `secret/mongodb` donde se encuentra el **engine KV** previamente configurado.
+```
+vault write -tls-skip-verify secret/mongodb user="$(oc get secret/mongodb -o jsonpath="{.data.MONGODB_USERNAME}" | base64 -d )" password="$(oc get secret/mongodb -o jsonpath="{.data.MONGODB_PASSWORD}" | base64 -d )"
+```
+Realizamos un `vault read` para leer los secretos, deberiamos tener el siguiente _output_:
+```
+vault read -tls-skip-verify secret/mongodb
+
+Key                 Value
+---                 -----
+refresh_interval    168h
+password            password
+user                admin
+```
+
+Limpiamos el despliegue de la app: **vault-app-api** en el proyecto `vault-app` para dar comienzo al siguiente escenario.
+```
+oc project vault-app
+oc delete all -l app=vault-app-api
+oc get all
+```
+
+### Despliegue de aplicación agregando Init Container.
+
+Para el corriente escenario, en el despliegue del POD de la aplicación **demo** le estaremos adicionando un **Init Container** para la obtención de los secretos (credenciales de conexión a mongoDB), bajar los secretos a un archivo (`/deployments/config/application.properties`) en un volumen compartido entre ambos containers (init y main container) que será accesible por el **Main Container**, es decir por la aplicación **demo**.
+
+_**NOTA:** Para propósito de esta PoC, el código de la aplicación fué escasamente adaptado para leer los secretos desde `/deployments/config/application.properties`, de no existir este archivo los secretos serán obtenidos desde las variables de entorno como fué demostrado en el escenario 0._
+
+Primero verificamos el **role** `demo` con **Kubernetes Auth Method** y con la pólitica `policy-example`
+```
+secret=`oc describe sa default | grep 'Tokens:' | awk '{print $2}'`
+token=`oc describe secret $secret | grep 'token:' | awk '{print $2}'`
+vault write -tls-skip-verify auth/kubernetes/login role=demo jwt=$token
+
+Key                                       Value
+---                                       -----
+token                                     s.Mx3brVu6uk6yMJGC6R74Yf8K
+token_accessor                            AceKHeY7HIGUKCUfdUK8M69g
+token_duration                            24h
+token_renewable                           true
+token_policies                            ["default" "policy-example"]
+identity_policies                         []
+policies                                  ["default" "policy-example"]
+token_meta_service_account_name           default
+token_meta_service_account_namespace      vault-app
+token_meta_service_account_secret_name    default-token-qpfwq
+token_meta_service_account_uid            944b7f2f-2e1b-44e3-ba2a-ed4dec0cd528
+token_meta_role                           demo
+```
+
+Desplegamos la aplicación `vault-app-api` y exponemos el servicio para ser accedide via HTTP por fuera del cluster OCP. 
+_**NOTA:** Observar que no se ha realizado un nuevo Build de la aplicación, solo se ha modficado el despliegue de la misma agregando el **Init Container**.
+```
+oc apply -f example01/020-deployConfig-api.yaml
+oc expose svc vault-app-api
+```
+Verificar los logs de deployment y de ejecución del init Container de modo didáctico.

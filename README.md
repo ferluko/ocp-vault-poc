@@ -111,17 +111,52 @@ export VAULT_TOKEN=$ROOT_TOKEN
 vault operator unseal --tls-skip-verify $KEYS
 ```
 Deberiamos tener un _output_ como el siguiente:
->
->Key             Value
->---             -----
->Seal Type       shamir
->Initialized     true
->Sealed          false
->Total Shares    1
->Threshold       1
->Version         1.3.2
->Cluster Name    vault-cluster-a1531371
->Cluster ID      1c6d4c42-d82b-411d-9e8c-363f92e52ee4
->HA Enabled      false
->
+```
+Key             Value
+---             -----
+Seal Type       shamir
+Initialized     true
+Sealed          false
+Total Shares    1
+Threshold       1
+Version         1.3.2
+Cluster Name    vault-cluster-a1531371
+Cluster ID      1c6d4c42-d82b-411d-9e8c-363f92e52ee4
+HA Enabled      false
+```
 ```exit``` para salir del **shell** del **POD**.
+
+### Configuración de Vault
+Aqui estaremos configurando el metodo de autenticación Kubernetes, este mismo se utilizá en los escenarios 1 y 2 para la obtención de secretos.
+Utilizaremos la **SA**(System Account) ```vault-auth``` previamente creado, obtendremos su **token** de K8s y lo registraremos en **Vault** junto a su certificado asociado. De esta forma cada **POD** que se ejecute en K8s podrá autenticarse con Vault. Luego dependerá del **Role_ID** y de la politica asociada que se especifique para la obtención de los secretos. Complementar el entendimiento con la _Documentación Adicional_
+```
+oc project hashicorp
+
+secret=`oc describe sa vault-auth | grep 'Tokens:' | awk '{print $2}'`
+token=`oc describe secret $secret | grep 'token:' | awk '{print $2}'`
+pod=`oc get pods | grep vault | awk '{print $1; exit}'`
+oc exec $pod -- cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt > ca.crt
+```
+```$ROOT_TOKEN``` es el token que hemos tomado nota en el paso previo (instalacón de Vault)
+```
+export VAULT_TOKEN=$ROOT_TOKEN
+export VAULT_ADDR=https://`oc get route | grep -m1 vault | awk '{print $2}'`
+
+vault auth enable -tls-skip-verify kubernetes
+vault write -tls-skip-verify auth/kubernetes/config token_reviewer_jwt=$token kubernetes_host=https://kubernetes.default.svc:443 kubernetes_ca_cert=@ca.crt
+
+vault read -tls-skip-verify auth/kubernetes/config
+rm ca.crt
+```
+
+## CONFIGURACIÓN DE VAULT PARA ESCENARIO 1
+> _A realizar por seguridad informatica_
+
+**_Datos de Vault:_**
+    **Policy:** policy-example
+    **Role:** demo
+    **Path secretos:** secret/mongodb
+    **Tipo:** KV v1
+    **SA:** default
+    **Tipo de Auth:** K8s
+

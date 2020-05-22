@@ -65,6 +65,7 @@ COMPLETAR...
 
 oc apply -f vault/injector/install/
 
+https://www.vaultproject.io/docs/platform/k8s/injector
 
 =============================== CONFIGURACIÓN DE VAULT PARA TODOS LOS ESCENARIOS(dentro project hashicorp) ==========================
 oc project hashicorp
@@ -93,7 +94,7 @@ Datos de Vault:
 	SA: default
 	Tipo de Auth: K8s
 	
-vault secrets enable -tls-skip-verify -version=1 -path=secret/ kv
+vault secrets enable -tls-skip-verify -version=1 -path=secret/mongodb kv
 
 vault policy write -tls-skip-verify policy-example policy-example.hcl
 

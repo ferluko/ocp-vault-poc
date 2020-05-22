@@ -255,7 +255,7 @@ token_meta_service_account_uid            944b7f2f-2e1b-44e3-ba2a-ed4dec0cd528
 token_meta_role                           demo
 ```
 
-Desplegamos la aplicación `vault-app-api` y exponemos el servicio para ser accedide via HTTP por fuera del cluster OCP.
+Desplegamos la aplicación `vault-app-api` y exponemos el servicio para ser accesible vía HTTP por fuera del cluster OCP.
 _**NOTA:** Observar que no se ha realizado un nuevo Build de la aplicación, solo se ha modficado el despliegue de la misma agregando el **Init Container**.
 ```
 oc apply -f example01/020-deployConfig-api.yaml
@@ -263,24 +263,30 @@ oc expose svc vault-app-api
 ```
 Verificar los logs de deployment y de ejecución del init Container de modo didáctico.
 
+Limpiamos el despliegue de la aplicación `vault-app-api` para dar comienzo al siguiente escenario.
+```
+oc delete dc vault-app-api
+```
+
 ## ESCENARIO 2:  VAULT AGENT INJECTOR - SIDECAR CONTAINER
 
 ### Configuración de Vault para el escenario 2
-> _A realizar por seguridad informatica_
+> _A realizar por Seguridad Informatica_
 
 **_Datos de Vault:_**
-**Policy:** vault-app-policy-dynamic
-**Role:** vault-app-mongodb-role
-**Path secretos:** database/creds/vault-app-mongodb-role
-**Tipo:** Database (Mongodb plugin)
-**SA:** default
-**Tipo de Auth:** K8s
+* **Policy:** vault-app-policy-dynamic
+* **Role:** vault-app-mongodb-role
+* **Path secretos:** database/creds/vault-app-mongodb-role
+* **Tipo:** Database (Mongodb plugin)
+* **SA:** default
+* **Tipo de Auth:** K8s
 
 A continuación estamos habilitando el **Engine Database** para la utilización de los secretos dinámicos.
-```vault secrets enable -tls-skip-verify database```
+```
+vault secrets enable -tls-skip-verify database
+```
 
 Luego configuramos el path `database/config/vault-app-mongodb` con el **plugin** `mongodb-database-plugin` y le asignamos el **role** `vault-app-mongodb-role`. Adicionalmente le indicamos el string de conexión para poder crear y revocar credenciales de forma dinamica en la base de datos. Las credenciales (root y password) son obtenidos desde los secretos de K8s del escenario original.
-
 ```
 vault write -tls-skip-verify database/config/vault-app-mongodb \
    plugin_name=mongodb-database-plugin \
@@ -363,3 +369,44 @@ token_ttl                           24h
 token_type                          default
 ttl 
 ```
+
+### Despliegue de aplicación con la utilización de Vault Agent Injector.
+> _A realizar por Infraestructura (DevOps)_
+
+#### Vault Agent
+Vault Agent realiza tres funciones, las dos primeras ya las conocemos poque las hemos realizado de forma manual en el escenario anterior, pero ahora este agente agrega una tercer función la cual injecta código al yaml de despliegue basado en una plantilla **Consul**. Las tres funciones básicas que realiza son las siguientes:
+   * Se autentica con Vault mediante el método de autenticación de Kubernetes. 
+   * Almacena el token Vault en un archivo receptor como /var/run/secrets/vaultproject.io/token, y lo mantiene válido actualizándolo en el momento apropiado.
+   * La última característica de Vault Agent es la plantilla, permite que los secretos de Vault se bajen a los archivos mediante **Consul Tamplate Markup**.
+
+Diagrama:
+
+
+Este agente tomará el Role de un **Sidecar Container** para cada despliegue que dentro de su código YAML se observen ciertos `annotations`. Se sugiere complementar el entendimiento con la _Documentación Adicional_
+
+Ejemplos de los `annotations`(https://www.vaultproject.io/docs/platform/k8s/injector/annotations) de escenario en curso son:
+
+
+#### Instalación de Vault Injector
+Como primer paso, se realizará el despliegue del [Agente de Vault Injector](https://www.vaultproject.io/docs/platform/k8s/injector) en el mismo namespace `hashicorp` del Vault Server. 
+Durante este despliegue se estarán creando los siguientes objetos K8s en nuestro cluster OCP:
+* vault-injector ClusterRole
+* vault-injector ClusterRoleBinding
+* vault-injector ServiceAccount
+* vault-injector Deployment
+* vault-injector Service
+* vault-injector NetworkPolicy
+* vault-injector MutatingWebhookConfiguration
+
+_En tu maquina local_
+Nos posicionamos sobre el reposito que hemos clonado y sobre el proyecto `hashicorp`. 
+```
+oc project hashicorp
+oc apply -f vault/injector/install/
+```
+
+
+#### REFERENCIAS: 
+* https://www.vaultproject.io/docs/platform/k8s/injector
+* https://www.hashicorp.com/blog/injecting-vault-secrets-into-kubernetes-pods-via-a-sidecar/
+* https://www.openshift.com/blog/integrating-hashicorp-vault-in-openshift-4

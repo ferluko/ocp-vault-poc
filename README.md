@@ -227,6 +227,7 @@ oc get all
 ```
 
 ### Despliegue de aplicación agregando Init Container.
+> _A realizar por Infraestructura (DevOps)_
 
 Para el corriente escenario, en el despliegue del POD de la aplicación **demo** le estaremos adicionando un **Init Container** para la obtención de los secretos (credenciales de conexión a mongoDB), bajar los secretos a un archivo (`/deployments/config/application.properties`) en un volumen compartido entre ambos containers (init y main container) que será accesible por el **Main Container**, es decir por la aplicación **demo**.
 
@@ -254,10 +255,110 @@ token_meta_service_account_uid            944b7f2f-2e1b-44e3-ba2a-ed4dec0cd528
 token_meta_role                           demo
 ```
 
-Desplegamos la aplicación `vault-app-api` y exponemos el servicio para ser accedide via HTTP por fuera del cluster OCP. 
+Desplegamos la aplicación `vault-app-api` y exponemos el servicio para ser accedide via HTTP por fuera del cluster OCP.
 _**NOTA:** Observar que no se ha realizado un nuevo Build de la aplicación, solo se ha modficado el despliegue de la misma agregando el **Init Container**.
 ```
 oc apply -f example01/020-deployConfig-api.yaml
 oc expose svc vault-app-api
 ```
 Verificar los logs de deployment y de ejecución del init Container de modo didáctico.
+
+## ESCENARIO 2:  VAULT AGENT INJECTOR - SIDECAR CONTAINER
+
+### Configuración de Vault para el escenario 2
+> _A realizar por seguridad informatica_
+
+**_Datos de Vault:_**
+**Policy:** vault-app-policy-dynamic
+**Role:** vault-app-mongodb-role
+**Path secretos:** database/creds/vault-app-mongodb-role
+**Tipo:** Database (Mongodb plugin)
+**SA:** default
+**Tipo de Auth:** K8s
+
+A continuación estamos habilitando el **Engine Database** para la utilización de los secretos dinámicos.
+```vault secrets enable -tls-skip-verify database```
+
+Luego configuramos el path `database/config/vault-app-mongodb` con el **plugin** `mongodb-database-plugin` y le asignamos el **role** `vault-app-mongodb-role`. Adicionalmente le indicamos el string de conexión para poder crear y revocar credenciales de forma dinamica en la base de datos. Las credenciales (root y password) son obtenidos desde los secretos de K8s del escenario original.
+
+```
+vault write -tls-skip-verify database/config/vault-app-mongodb \
+   plugin_name=mongodb-database-plugin \
+   allowed_roles="vault-app-mongodb-role" \
+   connection_url="mongodb://{{username}}:{{password}}@mongodb.vault-app.svc.cluster.local:27017/admin" \
+   username="admin" \
+   password="$(oc get secret/mongodb -o jsonpath="{.data.MONGODB_ROOT_PASSWORD}" | base64 -d )"
+```
+Comprobamos la configuración realizada con `vault read`:
+```
+vault read -tls-skip-verify database/config/vault-app-mongodb
+
+Key                                   Value
+---                                   -----
+allowed_roles                         [vault-app-mongodb-role]
+connection_details                    map[connection_url:mongodb://{{username}}:{{password}}@mongodb.vault-app.svc.cluster.local:27017/admin username:admin]
+plugin_name                           mongodb-database-plugin
+root_credentials_rotate_statements    []
+```
+
+Le especificamos la capacidades del **role** `vault-app-mongodb-role` que podrá realizar en la base de datos. En este ejemplo le estamos dando un role **admin** para la base de datos llamada **sampledb**.
+
+```
+vault write -tls-skip-verify database/roles/vault-app-mongodb-role \
+   db_name=vault-app-mongodb \
+   creation_statements='{ "db": "sampledb", "roles": [{"role": "readWrite", "db": "sampledb"}] }' \
+   default_ttl="1h" \
+   max_ttl="24h" \
+   revocation_statements='{ "db": "sampledb" }'
+
+vault read -tls-skip-verify database/roles/vault-app-mongodb-role
+
+Key                      Value
+---                      -----
+creation_statements      [{ "db": "sampledb", "roles": [{"role": "readWrite", "db": "sampledb"}] }]
+db_name                  vault-app-mongodb
+default_ttl              1h
+max_ttl                  24h
+renew_statements         []
+revocation_statements    [{ "db": "sampledb" }]
+rollback_statements      []
+```
+
+A continuacón estamos creando la política lllamda `vault-app-policy-dynamic` con capacidades de lectura para el **path** `database/creds/vault-app-mongodb-role`, crear y revocar _"leases".
+`vault policy write -tls-skip-verify vault-app-policy-dynamic policy/vault-app-dynamic-secrets-policy.hcl`
+
+Contenido de archivo `policy/vault-app-dynamic-secrets-policy.hcl`:
+```
+path "database/creds/vault-app-mongodb-role" {
+  capabilities = ["read"]
+}
+path "sys/leases/renew" {
+  capabilities = ["create"]
+}
+path "sys/leases/revoke" {
+  capabilities = ["update"]
+}	
+```
+
+Ya creado y configurado el **engine database** con el plugin de **MongoDB**, a continuación le estaremos diciendo a Vault que el **role** `vault-app-mongodb-role` que se autenticará vía metodo Kubernetes con el alcance definido por la **policy**  `vault-app-policy-dynamic` con un TTL de 24hs.
+```
+vault write -tls-skip-verify auth/kubernetes/role/vault-app-mongodb-role bound_service_account_names=default bound_service_account_namespaces='*' policies=vault-app-policy-dynamic ttl=24h
+
+vault read -tls-skip-verify auth/kubernetes/role/vault-app-mongodb-role
+
+Key                                 Value
+---                                 -----
+bound_service_account_names         [default]
+bound_service_account_namespaces    [*]
+policies                            [vault-app-policy-dynamic]
+token_bound_cidrs                   []
+token_explicit_max_ttl              0s
+token_max_ttl                       0s
+token_no_default_policy             false
+token_num_uses                      0
+token_period                        0s
+token_policies                      [vault-app-policy-dynamic]
+token_ttl                           24h
+token_type                          default
+ttl 
+```

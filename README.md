@@ -159,12 +159,12 @@ rm ca.crt
 > _A realizar por seguridad informatica_
 
 **_Datos de Vault:_**
-**Policy:** policy-example
-**Role:** demo
-**Path secretos:** secret/mongodb
-**Tipo:** KV v1
-**SA:** default
-**Tipo de Auth:** K8s
+* **Policy:** policy-example
+* **Role:** demo
+* **Path secretos:** secret/mongodb
+* **Tipo:** KV v1
+* **SA:** default
+* **Tipo de Auth:** K8s
 
 A continuación estamos habilitando el **Engine Key/Value (KV)** en el path `secret/mongodb` y le asignamos una política `policy-example` con capacidades de _Read_ y _List_ en el `path` mencionado.
 ```
@@ -325,8 +325,9 @@ rollback_statements      []
 ```
 
 A continuacón estamos creando la política lllamda `vault-app-policy-dynamic` con capacidades de lectura para el **path** `database/creds/vault-app-mongodb-role`, crear y revocar _"leases".
-`vault policy write -tls-skip-verify vault-app-policy-dynamic policy/vault-app-dynamic-secrets-policy.hcl`
-
+```
+vault policy write -tls-skip-verify vault-app-policy-dynamic policy/vault-app-dynamic-secrets-policy.hcl
+```
 Contenido de archivo `policy/vault-app-dynamic-secrets-policy.hcl`:
 ```
 path "database/creds/vault-app-mongodb-role" {
@@ -340,7 +341,7 @@ path "sys/leases/revoke" {
 }	
 ```
 
-Ya creado y configurado el **engine database** con el plugin de **MongoDB**, a continuación le estaremos diciendo a Vault que el **role** `vault-app-mongodb-role` que se autenticará vía metodo Kubernetes con el alcance definido por la **policy**  `vault-app-policy-dynamic` con un TTL de 24hs.
+Ya creado y configurado el **engine database** con el plugin de **MongoDB**, a continuación le estaremos diciendo a Vault que el **role** `vault-app-mongodb-role` que se autenticará vía metodo Kubernetes (con la SA `default` y desde cualquier namespace) con el alcance definido por la **policy**  `vault-app-policy-dynamic` con un TTL de 24hs.
 ```
 vault write -tls-skip-verify auth/kubernetes/role/vault-app-mongodb-role bound_service_account_names=default bound_service_account_namespaces='*' policies=vault-app-policy-dynamic ttl=24h
 

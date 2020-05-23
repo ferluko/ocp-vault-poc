@@ -74,7 +74,7 @@ sudo ./nfs.sh
 exit
 ```
 
-Creamos el **Kubernetes System Account:** ```vault-auth``` y los asignamos a todos los proyectos, este SA será ultilizado posteriormento para la autientificación de los PODs con **Vault** utilizando [**Kubernetes Auth Method**](https://www.vaultproject.io/docs/auth/kubernetes). Recomendamos reforzar su conocimiento leyendo como funciona este método en la documentacion adicional.
+Creamos el **Kubernetes System Account:** ```vault-auth``` y lo asignamos a todos los proyectos, este SA será ultilizado posteriormente para la autentificación de los PODs con **Vault** utilizando [**Kubernetes Auth Method**](https://www.vaultproject.io/docs/auth/kubernetes). Recomendamos reforzar su conocimiento leyendo como funciona este método en la _Documentación adicional_.
 ```
 oc create sa vault-auth
 oc adm policy add-cluster-role-to-user system:auth-delegator -z vault-auth
@@ -97,16 +97,18 @@ watch oc status --suggest
 ```
 
 #### Inicialización de Vault
-Por desfecto Vault viene [**Sealed state**](https://www.vaultproject.io/docs/concepts/seal) o precintado. A continuación estaremos inicializado Vault, generando por primera vez el **_Root Token_** y las llaves ([Algoritmo de Shamir](https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing)) para el **unseal**.
+Por defecto Vault viene [**Sealed state**](https://www.vaultproject.io/docs/concepts/seal) o precintado. A continuación estaremos inicializado Vault, generando por primera vez el **_Root Token_** y las llaves ([Algoritmo de Shamir](https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing)) para el **unseal**.
+
+_En tu maquina local._
 ```
 POD=$(oc get pods -l app.kubernetes.io/name=vault --no-headers -o custom-columns=NAME:.metadata.name)
 oc rsh $POD
 ```
-Remote Shell al Pod de Vault, osea dentro del pod de vault ejecutamos:
+Remote Shell al Pod de Vault, osea dentro del pod del Vault Server ejecutamos:
 ```
 vault operator init --tls-skip-verify -key-shares=1 -key-threshold=1
 ```
-Tomar nota de forma segura ```Unseal Key 1```  y el ```Initial Root Token```:
+Tomar nota de forma segura de `Unseal Key 1`  y el `Initial Root Token`:
 ```
 Unseal Key 1: n4Ju98iDxJXhNLVNgNHSGA+/C0m+SB9wE/BCdTRMmMg=
 Initial Root Token: s.JmItROuk2vfOrA1u9UmTReqY
@@ -135,10 +137,18 @@ Cluster Name    vault-cluster-a1531371
 Cluster ID      1c6d4c42-d82b-411d-9e8c-363f92e52ee4
 HA Enabled      false
 ```
-```exit``` para salir del **shell** del **POD**.
+`exit` para salir del **shell** del **POD**.
 
 ### Configuración de Vault
-Aqui estaremos configurando el metodo de autenticación Kubernetes, este mismo se utilizá en los escenarios 1 y 2 para la obtención de secretos.
+_En tu maquina local._
+`$ROOT_TOKEN` es el token que hemos tomado nota en el paso previo (Instalación de Vault) y lo utilizaremos para conectarnos a Vault desde nuestro cliente local y realizar las siguientes configuraciones.
+_NOTA:  Vault CLI utiliza las variables de entorno `VAULT_TOKEN` y `VAULT_ADDR` para autenticar sin certificados adicionales, por lo tanto siempre utilizaremos el parámetro `-tls-skip-verify` (Esto es configurable)._
+```
+export VAULT_TOKEN=$ROOT_TOKEN
+export VAULT_ADDR=https://`oc get route | grep -m1 vault | awk '{print $2}'`
+```
+
+A continuación estaremos configurando el metodo de autenticación Kubernetes, este mismo se utilizá en los escenarios 1 y 2 para la obtención de secretos.
 Utilizaremos el **SA**(System Account) ```vault-auth``` previamente creado, obtendremos su **token** de K8s y lo registraremos en **Vault** junto a su certificado asociado. De esta forma cada **POD** que se ejecute en K8s podrá autenticarse con Vault. Luego dependerá del **Role** y de la **Policy** asociada que se especifique junto al **token** mencionado para la obtención de los secretos. Complementar el entendimiento con la _Documentación Adicional_.
 ```
 oc project hashicorp
@@ -147,11 +157,6 @@ secret=`oc describe sa vault-auth | grep 'Tokens:' | awk '{print $2}'`
 token=`oc describe secret $secret | grep 'token:' | awk '{print $2}'`
 pod=`oc get pods | grep vault | awk '{print $1; exit}'`
 oc exec $pod -- cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt > ca.crt
-```
-```$ROOT_TOKEN``` es el token que hemos tomado nota en el paso previo (Instalación de Vault)
-```
-export VAULT_TOKEN=$ROOT_TOKEN
-export VAULT_ADDR=https://`oc get route | grep -m1 vault | awk '{print $2}'`
 
 vault auth enable -tls-skip-verify kubernetes
 vault write -tls-skip-verify auth/kubernetes/config token_reviewer_jwt=$token kubernetes_host=https://kubernetes.default.svc:443 kubernetes_ca_cert=@ca.crt
@@ -159,12 +164,14 @@ vault write -tls-skip-verify auth/kubernetes/config token_reviewer_jwt=$token ku
 vault read -tls-skip-verify auth/kubernetes/config
 rm ca.crt
 ```
-Limpiamos el despliegue de la app: **vault-app-api** en el proyecto `vault-app` para dar comienzo al siguiente escenario.
+
+Limpiamos el despliegue de la app **vault-app-api** en el proyecto `vault-app` para dar comienzo al siguiente escenario.
 ```
 oc project vault-app
 oc delete all -l app=vault-app-api
 oc get all
 ```
+
 ## ESCENARIO 1: VAULT API CALL - INIT CONTAINER
 
 **Descripción:** Despliegue de la aplicación `vault-app-api` junto a un **_Init Container_** en el mismo POD que tendrá la función de obtener los secretos vía una llamada API HTTP a Vault y bajarlos en un volumen compartido entre estos dos contenedores del mismo POD.

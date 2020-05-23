@@ -31,7 +31,7 @@ oc create -f mongodb/010-deploy-secret-mongodb-service.yaml
 
 ## ESCENARIO 0 - ESCENARIO ORIGINAL
 
-**Descripción:** Despliegue de la aplicación `vault-app-api` con la utilización de secretos nativos de Kubernetes los cuales son inyectados al código de la aplicación de forma tradicional, es decir vía de variables de entorno.
+**Descripción:** Construcción y despliegue de la aplicación `vault-app-api`. Esta aplicación Node.js trata de una API HTTP sencilla para el registro a citas y persistirlas en una base de datos MondoDB. A modo didáctico y para no utilizar terceras herramientas, se utiliza el módulo Swagger para operaciones de GET y POST. Las credenciales a la base de datos MongoDB son obtenidas al despliegue (secretos nativos de Kubernetes) e inyectadas al código de la aplicación de forma tradicional, es decir vía de variables de entorno.
 **Objetivo Particular:**  Mostrar el escenario original: el código de la aplicación, su sencilla arquitectura, como son manejados y consumidos los secretos, el despliegue. 
 
 ### Construcción (Building) de la aplicación demo
@@ -44,20 +44,24 @@ watch oc status --suggest
 oc logs -f vault-app-api-1-build
 ```
 
-A continuación desplegamos la aplicación ```vault-app-api``` con la imagen del último **build**. Las credenciales, el nombre de la base, IP y puerto que serán del string de conexión a MongoDB serán provistos por **variables de entorno** utilizando los **Secretos de K8s** , los mismos que previamente fueron utilizados para inialización de la misma base de datos. De esta forma representamos un escenario original donde los secretos de una aplicacion (string de conexión) son variables de entorno, es decir secretos de K8s.
+### Despliegue (Deploy) de la aplicación demo
+A continuación desplegamos la aplicación ```vault-app-api``` con la imagen del último **build** realizado. Las credenciales, el nombre de la base, IP y puerto que serán del string de conexión a MongoDB serán provistos por **variables de entorno** utilizando los **Secretos de K8s** , los mismos que previamente fueron utilizados para inialización de la misma base de datos. De esta forma representamos un escenario original donde los secretos de una aplicacion (string de conexión) son variables de entorno, es decir secretos de K8s.
+
 **[020-deployConfig-api.yaml](https://github.com/ferluko/ocp-vault-poc/blob/master/example00/020-deployConfig-api.yaml)**
 ``` 
 oc create -f example00/020-deployConfig-api.yaml
 oc expose svc vault-app-api
 oc status --suggest
 ```
-_NOTA: A modo ejemplo de esta PoC se pueden observar los logs del POD de la aplicación donde se muestra por consola el string de conexión a la base de datos
-```oc logs -f vault-app-api```_
+_NOTA: A modo ejemplo de esta PoC, observando los logs del POD de la aplicación se muestra por consola el string de conexión a la base de datos._
+```oc logs -f vault-app-api```
 
 URL para probar la APP: http://vault-app-api-vault-app.apps.ocp4.labs.semperti.local/api-docs/ 
-Utilizando Swagger podemos simular el uso de esta API realizando varios POST comprobando la conexión a la base de datos.
+>
+>Utilizando Swagger podemos simular el uso de esta API realizando varios POST comprobando la conexión a la base de datos.
+>
 
-### Instalación de Hashicorp Vault Server en OCP
+## INSTALACIÓN DE HASHICORP VAULT SERVER EN OPENSHIFT
 _En tu maquina local._
 
 ```
@@ -70,7 +74,7 @@ sudo ./nfs.sh
 exit
 ```
 
-Creamos el **Kubernetes System Account:** ```vault-auth``` y los asignamos a todos los proyectos, este SA será ultilizado para la autientificación de los PODs con **Vault** utilizando [**Kubernetes Auth Method**](https://www.vaultproject.io/docs/auth/kubernetes). Recomendamos reforzar su conocimiento leyendo como funciona este método en la documentacion adicional.
+Creamos el **Kubernetes System Account:** ```vault-auth``` y los asignamos a todos los proyectos, este SA será ultilizado posteriormento para la autientificación de los PODs con **Vault** utilizando [**Kubernetes Auth Method**](https://www.vaultproject.io/docs/auth/kubernetes). Recomendamos reforzar su conocimiento leyendo como funciona este método en la documentacion adicional.
 ```
 oc create sa vault-auth
 oc adm policy add-cluster-role-to-user system:auth-delegator -z vault-auth
@@ -93,6 +97,7 @@ watch oc status --suggest
 ```
 
 #### Inicialización de Vault
+Por desfecto Vault viene [**Sealed state**](https://www.vaultproject.io/docs/concepts/seal) o precintado. A continuación estaremos inicializado Vault, generando por primera vez el **_Root Token_** y las llaves ([Algoritmo de Shamir](https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing)) para el **unseal**.
 ```
 POD=$(oc get pods -l app.kubernetes.io/name=vault --no-headers -o custom-columns=NAME:.metadata.name)
 oc rsh $POD
@@ -106,7 +111,7 @@ Tomar nota de forma segura ```Unseal Key 1```  y el ```Initial Root Token```:
 Unseal Key 1: n4Ju98iDxJXhNLVNgNHSGA+/C0m+SB9wE/BCdTRMmMg=
 Initial Root Token: s.JmItROuk2vfOrA1u9UmTReqY
 ```
-Y exportarlas como variables de enternos para futuro uso:
+Y exportarlas como variables de entornos para futuro uso:
 ```
 export KEYS=n4Ju98iDxJXhNLVNgNHSGA+/C0m+SB9wE/BCdTRMmMg=
 export ROOT_TOKEN=s.JmItROuk2vfOrA1u9UmTReqY
@@ -134,7 +139,7 @@ HA Enabled      false
 
 ### Configuración de Vault
 Aqui estaremos configurando el metodo de autenticación Kubernetes, este mismo se utilizá en los escenarios 1 y 2 para la obtención de secretos.
-Utilizaremos la **SA**(System Account) ```vault-auth``` previamente creado, obtendremos su **token** de K8s y lo registraremos en **Vault** junto a su certificado asociado. De esta forma cada **POD** que se ejecute en K8s podrá autenticarse con Vault. Luego dependerá del **Role_ID** y de la politica asociada que se especifique para la obtención de los secretos. Complementar el entendimiento con la _Documentación Adicional_
+Utilizaremos el **SA**(System Account) ```vault-auth``` previamente creado, obtendremos su **token** de K8s y lo registraremos en **Vault** junto a su certificado asociado. De esta forma cada **POD** que se ejecute en K8s podrá autenticarse con Vault. Luego dependerá del **Role** y de la **Policy** asociada que se especifique junto al **token** mencionado para la obtención de los secretos. Complementar el entendimiento con la _Documentación Adicional_.
 ```
 oc project hashicorp
 
@@ -143,7 +148,7 @@ token=`oc describe secret $secret | grep 'token:' | awk '{print $2}'`
 pod=`oc get pods | grep vault | awk '{print $1; exit}'`
 oc exec $pod -- cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt > ca.crt
 ```
-```$ROOT_TOKEN``` es el token que hemos tomado nota en el paso previo (instalacón de Vault)
+```$ROOT_TOKEN``` es el token que hemos tomado nota en el paso previo (Instalación de Vault)
 ```
 export VAULT_TOKEN=$ROOT_TOKEN
 export VAULT_ADDR=https://`oc get route | grep -m1 vault | awk '{print $2}'`
@@ -154,8 +159,17 @@ vault write -tls-skip-verify auth/kubernetes/config token_reviewer_jwt=$token ku
 vault read -tls-skip-verify auth/kubernetes/config
 rm ca.crt
 ```
-
+Limpiamos el despliegue de la app: **vault-app-api** en el proyecto `vault-app` para dar comienzo al siguiente escenario.
+```
+oc project vault-app
+oc delete all -l app=vault-app-api
+oc get all
+```
 ## ESCENARIO 1: VAULT API CALL - INIT CONTAINER
+
+**Descripción:** Despliegue de la aplicación `vault-app-api` junto a un **_Init Container_** en el mismo POD que tendrá la función de obtener los secretos vía una llamada API HTTP a Vault y bajarlos en un volumen compartido entre estos dos contenedores del mismo POD.
+
+**Objetivo Particular:** Introducción al manejo de secretos centralizados, metodo de autentificacion de Kubernetes, Vault API calls, estrategias para agregar manejo de secretos en aplicaciones legacy o “Not Vault Aware Apps”, es decir aplicaciones sin manejo de secretos en memoria de la App.
 
 ### Configuración de Vault para el escenario 1
 > _A realizar por seguridad informatica_
@@ -173,7 +187,6 @@ A continuación estamos habilitando el **Engine Key/Value (KV)** en el path `sec
 vault secrets enable -tls-skip-verify -version=1 -path=secret/mongodb kv
 vault policy write -tls-skip-verify policy-example ./policy/policy-example.hcl
 ``` 
-
 Contenido del archivo `./policy/policy-example.hcl`:
 ```
 path "secret/mongodb" {
@@ -185,7 +198,7 @@ Con el siguiente comando estamos configurando en Vault el **role** `demo` con el
 ``` 
 vault write -tls-skip-verify auth/kubernetes/role/demo bound_service_account_names=default bound_service_account_namespaces='*' policies=policy-example ttl=24h
 ```
-Leemos con el comando  `vault read`  lo que acabamos de configurar:
+Con el comando  `vault read`  observamos lo que acabamos de configurar:
 ```
 vault read -tls-skip-verify auth/kubernetes/role/demo
 
@@ -206,7 +219,7 @@ token_type                          default
 ttl                                 24h
 ```
 
-Para la realización de la PoC vamos a leer (copiar) los secretos desde k8s y llevarlos a Vault, pero en un **entorno real** el departamento _Seguridad Informatica_ deberia crear los secretos en el **path**: `secret/mongodb` donde se encuentra el **engine KV** previamente configurado.
+Para la realización de la PoC vamos a leer (copiar) los secretos preexistente de k8s y llevarlos a Vault, pero en un **entorno real** el departamento _Seguridad Informatica_ deberia crear los secretos en el **path**: `secret/mongodb` donde se encuentra el **engine KV** previamente configurado.
 ```
 vault write -tls-skip-verify secret/mongodb user="$(oc get secret/mongodb -o jsonpath="{.data.MONGODB_USERNAME}" | base64 -d )" password="$(oc get secret/mongodb -o jsonpath="{.data.MONGODB_PASSWORD}" | base64 -d )"
 ```
@@ -219,13 +232,6 @@ Key                 Value
 refresh_interval    168h
 password            password
 user                admin
-```
-
-Limpiamos el despliegue de la app: **vault-app-api** en el proyecto `vault-app` para dar comienzo al siguiente escenario.
-```
-oc project vault-app
-oc delete all -l app=vault-app-api
-oc get all
 ```
 
 ### Despliegue de aplicación agregando Init Container.
@@ -258,22 +264,72 @@ token_meta_role                           demo
 ```
 
 Desplegamos la aplicación `vault-app-api` y exponemos el servicio para ser accesible vía HTTP por fuera del cluster OCP.
-_**NOTA:** Observar que no se ha realizado un nuevo Build de la aplicación, solo se ha modficado el despliegue de la misma agregando el **Init Container**.
+
+_**NOTA:** Observar que no se ha realizado un nuevo Build de la aplicación, solo se ha modficado el despliegue de la misma agregando el **Init Container**._
 **[020-deployConfig-api.yaml](https://github.com/ferluko/ocp-vault-poc/blob/master/example01/020-deployConfig-api.yaml)**
 ```
 oc apply -f example01/020-deployConfig-api.yaml
 oc expose svc vault-app-api
 ```
-Verificar los logs de deployment y de ejecución del init Container a modo didáctico.
-
+Verificar los logs de deployment y de ejecución del init Container y main container a modo didáctico.
 Limpiamos el despliegue de la aplicación `vault-app-api` para dar comienzo al siguiente escenario.
 ```
 oc delete dc vault-app-api
+oc delete all -l app=vault-app-api
+oc get all
 ```
 
 ## ESCENARIO 2:  VAULT AGENT INJECTOR - SIDECAR CONTAINER
+**Descripción:** Despliegue de la aplicación `vault-app-api` modificando el yaml del escenario original con solo agregando “annotations” para la inyección automática de secretos.
 
-### Configuración de Vault para el escenario 2
+**Objetivo Particular:** Introducción a los secretos dinámicos, Vault injector: un sidecar container encargado de modificar dinámicamente el despliegue de la App, obtener los secretos, bajarlos en un volumen compartido, crear y revocar las credenciales de forma dinámica en MongoDB.
+
+### [Vault Agent Injector](https://www.vaultproject.io/docs/platform/k8s/injector) ###
+Vault Agent realiza tres funciones básicas, las dos primeras ya las conocemos porque las hemos realizado de forma manual en el escenario anterior, pero ahora este agente agrega una excelente tercer función por medio de la automatización: injectar código al yaml de despliegue basado en una plantilla **Consul** sumando Vault como agente a nuestras aplicaciones. Las tres funciones mencionadas de este Agente son:
+   * Autenticar con Vault mediante el método de autenticación de Kubernetes. 
+   * Almacenar el token Vault en un archivo receptor como /var/run/secrets/vaultproject.io/token, y lo mantiene válido actualizándolo en el momento apropiado.
+   * La última característica de Vault Agent es la plantilla, permite que los secretos de Vault se bajen a los archivos mediante **Consul Tamplate Markup**.
+Diagrama:
+![Agent](https://raw.githubusercontent.com/ferluko/ocp-vault-poc/master/images/vault_agent_improved_arch.png)
+Primero el *Mutating Webhook* estará continuamente escaneado aquellos despliegues con el `annotation` `vault.hashicorp.com/agent-inject: 'true'`. Cuando esto suceda, injectará al código al YAML del despliegue de forma automatica con el **Sidecar Container**  con las funciones mencionadas anteriormente. El comportamiento y la parametría de este Agente también se realiza con más `annotations`(https://www.vaultproject.io/docs/platform/k8s/injector/annotations). Se sugiere complementar el entendimiento con la _Documentación Adicional_
+
+Ejemplos de los `annotations` de escenario en curso son:
+```
+annotations:
+        vault.hashicorp.com/agent-inject: 'true'
+        vault.hashicorp.com/agent-init-first: "true"
+        vault.hashicorp.com/agent-inject-status: "update"
+        vault.hashicorp.com/agent-inject-secret-application.properties: "database/creds/vault-app-mongodb-role"
+        vault.hashicorp.com/agent-inject-template-application.properties: |
+          {{- with secret "database/creds/vault-app-mongodb-role" -}}
+          const config = {db: { SECRET: '{{.Data.username }}:{{.Data.password }}' }};module.exports = config;   
+          {{- end }}
+        vault.hashicorp.com/secret-volume-path-application.properties: "/deployments/config"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/role: vault-app-mongodb-role
+        vault.hashicorp.com/tls-skip-verify : "true"
+```
+
+#### Instalación de Vault Injector
+> _A realizar por Infraestructura (DevOps)_
+
+Como primer paso, realizaremos el despliegue del [Agente de Vault Injector](https://www.vaultproject.io/docs/platform/k8s/injector) en el mismo namespace del Vault Server: `hashicorp`. 
+Durante este despliegue se estarán creando los siguientes objetos K8s en nuestro cluster OCP:
+* vault-injector ClusterRole
+* vault-injector ClusterRoleBinding
+* vault-injector ServiceAccount
+* vault-injector Deployment
+* vault-injector Service
+* vault-injector NetworkPolicy
+* vault-injector MutatingWebhookConfiguration
+
+_En tu maquina local_
+Nos posicionamos sobre el repositorio que hemos clonado y sobre el namespace `hashicorp`. 
+```
+oc project hashicorp
+oc apply -f vault/injector/install/
+```
+#### Configuración de Vault para el escenario 2
 > _A realizar por Seguridad Informatica_
 
 **_Datos de Vault:_**
@@ -376,50 +432,7 @@ ttl
 ### Despliegue de aplicación con la utilización de Vault Agent Injector.
 > _A realizar por Infraestructura (DevOps)_
 
-#### Vault Agent
-Vault Agent realiza tres funciones, las dos primeras ya las conocemos poque las hemos realizado de forma manual en el escenario anterior, pero ahora este agente agrega una tercer función la cual injecta código al yaml de despliegue basado en una plantilla **Consul**. Las tres funciones básicas que realiza son las siguientes:
-   * Se autentica con Vault mediante el método de autenticación de Kubernetes. 
-   * Almacena el token Vault en un archivo receptor como /var/run/secrets/vaultproject.io/token, y lo mantiene válido actualizándolo en el momento apropiado.
-   * La última característica de Vault Agent es la plantilla, permite que los secretos de Vault se bajen a los archivos mediante **Consul Tamplate Markup**.
-Diagrama:
-![Agent](https://raw.githubusercontent.com/ferluko/ocp-vault-poc/master/images/vault_agent_improved_arch.png)
-Primero el *Mutating Webhook* estará continuamente escaneado aquellos despliegues con el `annotation` `vault.hashicorp.com/agent-inject: 'true'`. Cuando esto suceda, injectará al código al YAML del despliegue de forma automatica con el **Sidecar Container**  con las funciones mencionadas anteriormente. Adicionalmente el comportamiento y la parametría de este Agente también se realiza con más `annotations`(https://www.vaultproject.io/docs/platform/k8s/injector/annotations). Se sugiere complementar el entendimiento con la _Documentación Adicional_
-
-Ejemplos de los `annotations` de escenario en curso son:
-```
-annotations:
-        vault.hashicorp.com/agent-inject: 'true'
-        vault.hashicorp.com/agent-init-first: "true"
-        vault.hashicorp.com/agent-inject-status: "update"
-        vault.hashicorp.com/agent-inject-secret-application.properties: "database/creds/vault-app-mongodb-role"
-        vault.hashicorp.com/agent-inject-template-application.properties: |
-          {{- with secret "database/creds/vault-app-mongodb-role" -}}
-          const config = {db: { SECRET: '{{.Data.username }}:{{.Data.password }}' }};module.exports = config;   
-          {{- end }}
-        vault.hashicorp.com/secret-volume-path-application.properties: "/deployments/config"
-        vault.hashicorp.com/agent-pre-populate-only: "true"
-        vault.hashicorp.com/role: vault-app-mongodb-role
-        vault.hashicorp.com/tls-skip-verify : "true"
-```
-
-#### Instalación de Vault Injector
-Como primer paso, entonces realizaremos el despliegue del [Agente de Vault Injector](https://www.vaultproject.io/docs/platform/k8s/injector) en el mismo namespace del Vault Server: `hashicorp`. 
-Durante este despliegue se estarán creando los siguientes objetos K8s en nuestro cluster OCP:
-* vault-injector ClusterRole
-* vault-injector ClusterRoleBinding
-* vault-injector ServiceAccount
-* vault-injector Deployment
-* vault-injector Service
-* vault-injector NetworkPolicy
-* vault-injector MutatingWebhookConfiguration
-
-_En tu maquina local_
-Nos posicionamos sobre el reposito que hemos clonado y sobre el proyecto `hashicorp`. 
-```
-oc project hashicorp
-oc apply -f vault/injector/install/
-```
-Vamos al proyecto `vault-app`y agregamos el Mutation Webhook como un label del mismo para que esta funcionalidad automática entre en juego:
+Vamos al proyecto `vault-app`y agregamos un label para activar la injección de secretos de forma automatica, es decir activamos Mutation Webhook en el projecto:
 ```
 oc project vault-app
 oc label namespace vault-app vault.hashicorp.com/agent-webhook=enabled

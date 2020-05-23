@@ -32,6 +32,7 @@ oc create -f mongodb/010-deploy-secret-mongodb-service.yaml
 ## ESCENARIO 0 - ESCENARIO ORIGINAL
 
 **Descripción:** Construcción y despliegue de la aplicación `vault-app-api`. Esta aplicación Node.js trata de una API HTTP sencilla para el registro a citas y persistirlas en una base de datos MondoDB. A modo didáctico y para no utilizar terceras herramientas, se utiliza el módulo Swagger para operaciones de GET y POST. Las credenciales a la base de datos MongoDB son obtenidas al despliegue (secretos nativos de Kubernetes) e inyectadas al código de la aplicación de forma tradicional, es decir vía de variables de entorno.
+
 **Objetivo Particular:**  Mostrar el escenario original: el código de la aplicación, su sencilla arquitectura, como son manejados y consumidos los secretos, el despliegue. 
 
 ### Construcción (Building) de la aplicación demo
@@ -141,7 +142,9 @@ HA Enabled      false
 
 ### Configuración de Vault
 _En tu maquina local._
+
 `$ROOT_TOKEN` es el token que hemos tomado nota en el paso previo (Instalación de Vault) y lo utilizaremos para conectarnos a Vault desde nuestro cliente local y realizar las siguientes configuraciones.
+
 _NOTA:  Vault CLI utiliza las variables de entorno `VAULT_TOKEN` y `VAULT_ADDR` para autenticar sin certificados adicionales, por lo tanto siempre utilizaremos el parámetro `-tls-skip-verify` (Esto es configurable)._
 ```
 export VAULT_TOKEN=$ROOT_TOKEN
@@ -179,7 +182,7 @@ oc get all
 **Objetivo Particular:** Introducción al manejo de secretos centralizados, metodo de autentificacion de Kubernetes, Vault API calls, estrategias para agregar manejo de secretos en aplicaciones legacy o “Not Vault Aware Apps”, es decir aplicaciones sin manejo de secretos en memoria de la App.
 
 ### Configuración de Vault para el escenario 1
-> _A realizar por seguridad informatica_
+> _A realizar por Seguridad Informatica_
 
 **_Datos de Vault:_**
 * **Policy:** policy-example
@@ -226,7 +229,7 @@ token_type                          default
 ttl                                 24h
 ```
 
-Para la realización de la PoC vamos a leer (copiar) los secretos preexistente de k8s y llevarlos a Vault, pero en un **entorno real** el departamento _Seguridad Informatica_ deberia crear los secretos en el **path**: `secret/mongodb` donde se encuentra el **engine KV** previamente configurado.
+Para la realización de la PoC vamos a leer (copiar) los secretos preexistente de k8s y llevarlos a Vault, pero en un **entorno real** el departamento _Seguridad Informatica_ deberia crear los secretos en el **path**: `secret/mongodb` donde se encuentra el **engine KV** previamente configurado y solo debería comunicar a _Infraestructura_ el **path** y el **role** del secreto.
 ```
 vault write -tls-skip-verify secret/mongodb user="$(oc get secret/mongodb -o jsonpath="{.data.MONGODB_USERNAME}" | base64 -d )" password="$(oc get secret/mongodb -o jsonpath="{.data.MONGODB_PASSWORD}" | base64 -d )"
 ```
@@ -244,7 +247,7 @@ user                admin
 ### Despliegue de aplicación agregando Init Container.
 > _A realizar por Infraestructura (DevOps)_
 
-Para el corriente escenario, en el despliegue del POD de la aplicación **demo** le estaremos adicionando un **Init Container** para la obtención de los secretos (credenciales de conexión a mongoDB), bajar los secretos a un archivo (`/deployments/config/application.properties`) en un volumen compartido entre ambos containers (init y main container) que será accesible por el **Main Container**, es decir por la aplicación **demo**.
+Para el corriente escenario, al despliegue le estaremos adicionando un **Init Container** al POD de la aplicación para la obtención de los secretos (credenciales de conexión a mongoDB), bajar los secretos a un archivo (`/deployments/config/application.properties`) en un volumen compartido entre ambos containers (init y main container) que será accesible por el **Main Container**, es decir por la aplicación **demo** y conectarse a MongoDB.
 
 _**NOTA:** Para propósito de esta PoC, el código de la aplicación fué escasamente adaptado para leer los secretos desde `/deployments/config/application.properties`, de no existir este archivo los secretos serán obtenidos desde las variables de entorno como fué demostrado en el escenario 0._
 
@@ -457,7 +460,7 @@ oc logs -f vault-app-api
 >
 >¿Pero quién y cómo se crean, actualizan y revocan los secretos dinámicos de la base de datos MongoDB?
 >
-La respuesta es sencilla, el propio Vault Server por cada vez que realizamos una llamada al `path` del secreto y este está configurado como dinámico. Con siguiente comando verificamos que por cada `vault read` (en vault) se crea un secreto diferente en la base. De esta forma queda verificado que por cada instacia de la aplicación, es decir, por cada POD existen diferentes credenciales de acceso a MongoDB. 
+La respuesta es sencilla, el propio Vault Server por cada vez que realizamos una llamada al `path` del secreto y este está configurado como dinámico. Con el siguiente comando verificamos que por cada `vault read` (en vault) se crea un secreto diferente en la base. De esta forma queda verificado que por cada instancia de la aplicación, es decir, por cada POD existen diferentes credenciales de acceso a MongoDB. 
 ```
 vault read -tls-skip-verify -format json database/creds/vault-app-mongodb-role
 {

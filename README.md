@@ -31,12 +31,12 @@ oc create -f mongodb/010-deploy-secret-mongodb-service.yaml
 
 ## ESCENARIO 0 - ESCENARIO ORIGINAL
 
-**Descripción:** Construcción y despliegue de la aplicación `vault-app-api`. Esta aplicación Node.js trata de una API HTTP sencilla para el registro a citas y persistirlas en una base de datos MondoDB. A modo didáctico y para no utilizar terceras herramientas, se utiliza el módulo Swagger para operaciones de GET y POST. Las credenciales a la base de datos MongoDB son obtenidas al despliegue (secretos nativos de Kubernetes) e inyectadas al código de la aplicación de forma tradicional, es decir vía de variables de entorno.
+**Descripción:** Construcción y despliegue de la aplicación `vault-app-api`. Esta aplicación en *Node.js* trata de una API HTTP sencilla para el registro a citas y persistirlas en una base de datos *MondoDB*. A modo didáctico y para no utilizar terceras herramientas, se utiliza el módulo *Swagger* para operaciones de GET y POST. Las credenciales a la base de datos *MongoDB* son obtenidas al despliegue (secretos nativos de Kubernetes) e inyectadas al código de la aplicación de forma tradicional, es decir vía de variables de entorno.
 
 **Objetivo Particular:**  Mostrar el escenario original: el código de la aplicación, su sencilla arquitectura, como son manejados y consumidos los secretos, el despliegue. 
 
 ### Construcción (Building) de la aplicación demo
-Para el **build** de la aplicación utilizamos el código que se encuenta en la carpeta **appointment** del repositorio (branch **Master**) y la llamamos ```vault-app-api```
+Para el **build** de la aplicación utilizamos el código que se encuenta en la carpeta **appointment** del repositorio (branch **master**) y la llamamos ```vault-app-api```
 
 ```
 oc new-build https://github.com/ferluko/ocp-vault-poc.git --context-dir appointment --name vault-app-api
@@ -48,7 +48,7 @@ oc logs -f vault-app-api-1-build
 ```
 
 ### Despliegue (Deploy) de la aplicación demo
-A continuación desplegamos la aplicación ```vault-app-api``` con la imagen del último **build** realizado. Las credenciales, el nombre de la base, IP y puerto que serán del string de conexión a MongoDB serán provistos por **variables de entorno** utilizando los **Secretos de K8s** , los mismos que previamente fueron utilizados para inialización de la misma base de datos. De esta forma representamos un escenario original donde los secretos de una aplicacion (string de conexión) son variables de entorno, es decir secretos de K8s.
+A continuación desplegamos la aplicación ```vault-app-api``` con la imagen del último **build** realizado. Las credenciales, el nombre de la base, IP y puerto que serán parte del string de conexión a MongoDB son provistos por **variables de entorno** utilizando los **Secretos de K8s** , los mismos que previamente fueron utilizados para inialización de la misma base de datos. De esta forma representamos un escenario original donde los secretos de una aplicacion (string de conexión) son variables de entorno, es decir secretos de K8s.
 
 **[020-deployConfig-api.yaml](https://github.com/ferluko/ocp-vault-poc/blob/master/example00/020-deployConfig-api.yaml)**
 ``` 
@@ -113,13 +113,13 @@ vault operator init --tls-skip-verify -key-shares=1 -key-threshold=1
 ```
 Tomar nota de forma segura de `Unseal Key 1`  y el `Initial Root Token`:
 ```
-Unseal Key 1: n4Ju98iDxJXhNLVNgNHSGA+/C0m+SB9wE/BCdTRMmMg=
-Initial Root Token: s.JmItROuk2vfOrA1u9UmTReqY
+Unseal Key 1: aWq/aMor1rfy/k3Xc2p+Nfm5cFmNAkUt9LWFqhW5gKc=
+Initial Root Token: s.GJxmt6nLbqyXCN0HudpVtnzU
 ```
 Y exportarlas como variables de entornos para futuro uso:
 ```
-export KEYS=n4Ju98iDxJXhNLVNgNHSGA+/C0m+SB9wE/BCdTRMmMg=
-export ROOT_TOKEN=s.JmItROuk2vfOrA1u9UmTReqY
+export KEYS=aWq/aMor1rfy/k3Xc2p+Nfm5cFmNAkUt9LWFqhW5gKc=
+export ROOT_TOKEN=s.GJxmt6nLbqyXCN0HudpVtnzU
 export VAULT_TOKEN=$ROOT_TOKEN
 ```
 #### Unseal de Vault
@@ -136,8 +136,8 @@ Sealed          false
 Total Shares    1
 Threshold       1
 Version         1.3.2
-Cluster Name    vault-cluster-a1531371
-Cluster ID      1c6d4c42-d82b-411d-9e8c-363f92e52ee4
+Cluster Name    vault-cluster-4dabc5a9
+Cluster ID      28c1e080-1fd0-170e-2d55-5d49c93c0ea1
 HA Enabled      false
 ```
 `exit` para salir del **shell** del **POD**.
@@ -151,6 +151,7 @@ _NOTA:  Vault CLI utiliza las variables de entorno `VAULT_TOKEN` y `VAULT_ADDR` 
 ```
 export VAULT_TOKEN=$ROOT_TOKEN
 export VAULT_ADDR=https://`oc get route | grep -m1 vault | awk '{print $2}'`
+vault login -tls-skip-verify
 ```
 
 A continuación estaremos configurando el metodo de autenticación Kubernetes, este mismo se utilizá en los escenarios 1 y 2 para la obtención de secretos.
@@ -194,9 +195,9 @@ oc get all
 * **SA:** default
 * **Tipo de Auth:** K8s
 
-A continuación estamos habilitando el **Engine Key/Value (KV)** en el path `secret/mongodb` y le asignamos una política `policy-example` con capacidades de _Read_ y _List_ en el `path` mencionado.
+A continuación estamos habilitando el **Engine Key/Value (KV)** en el path `secret/` y le asignamos una política `policy-example` con capacidades de _Read_ y _List_ en el `path` mencionado.
 ```
-vault secrets enable -tls-skip-verify -version=1 -path=secret/mongodb kv
+vault secrets enable -tls-skip-verify -version=1 -path=secret kv
 vault policy write -tls-skip-verify policy-example ./policy/policy-example.hcl
 ``` 
 Contenido del archivo `./policy/policy-example.hcl`:

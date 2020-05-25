@@ -195,7 +195,7 @@ oc get all
 * **SA:** default
 * **Tipo de Auth:** K8s
 
-A continuación estamos habilitando el **Engine Key/Value (KV)** en el path `secret/` y le asignamos una política `policy-example` con capacidades de _Read_ y _List_ en el `path` mencionado.
+A continuación estamos habilitando el **Engine Key/Value (KV)** en el path `secret/` y le asignamos una política `policy-example` con capacidades de _Read_ y _List_ en  `secret/mongodb`.
 ```
 vault secrets enable -tls-skip-verify -version=1 -path=secret kv
 vault policy write -tls-skip-verify policy-example ./policy/policy-example.hcl
@@ -286,6 +286,11 @@ oc apply -f example01/020-deployConfig-api.yaml
 oc expose svc vault-app-api
 ```
 Verificar los logs de deployment y de ejecución del init Container y main container a modo didáctico.
+```
+pod=`oc get pods -L app=vault-app-api --no-headers -o custom-columns=NAME:.metadata.name | tail -n 1`
+oc logs -f $pod
+oc logs -f $pod -c vault-api
+```
 Limpiamos el despliegue de la aplicación `vault-app-api` para dar comienzo al siguiente escenario.
 ```
 oc delete dc vault-app-api
@@ -359,6 +364,7 @@ oc apply -f vault/injector/install/
 
 A continuación habilitamos el *Engine Database* para la utilización de los secretos dinámicos.
 ```
+oc project vault-app
 vault secrets enable -tls-skip-verify database
 ```
 

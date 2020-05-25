@@ -113,13 +113,13 @@ vault operator init --tls-skip-verify -key-shares=1 -key-threshold=1
 ```
 Tomar nota de forma segura de `Unseal Key 1`  y el `Initial Root Token`:
 ```
-Unseal Key 1: aWq/aMor1rfy/k3Xc2p+Nfm5cFmNAkUt9LWFqhW5gKc=
-Initial Root Token: s.GJxmt6nLbqyXCN0HudpVtnzU
+Unseal Key 1: GA31ux+Bb2XgElZTCDgX0Ytn3aBQtvbvCOqxLTE474M=
+Initial Root Token: s.PqOykxkZ3kkwNESDseF3T8yo
 ```
 Y exportarlas como variables de entornos para futuro uso:
 ```
-export KEYS=aWq/aMor1rfy/k3Xc2p+Nfm5cFmNAkUt9LWFqhW5gKc=
-export ROOT_TOKEN=s.GJxmt6nLbqyXCN0HudpVtnzU
+export KEYS=GA31ux+Bb2XgElZTCDgX0Ytn3aBQtvbvCOqxLTE474M=
+export ROOT_TOKEN=s.PqOykxkZ3kkwNESDseF3T8yo
 export VAULT_TOKEN=$ROOT_TOKEN
 ```
 #### Unseal de Vault
@@ -464,6 +464,7 @@ Desplegamos la misma aplicación pero en este caso solo agregando al YAML del es
 **[020-deployConfig-Vault-app-api-Inject.yaml](https://github.com/ferluko/ocp-vault-poc/blob/master/example02/020-deployConfig-Vault-app-api-Inject.yaml)**
 ```
 oc create -f example02/020-deployConfig-Vault-app-api-Inject.yaml
+oc expose svc vault-app-api
 ```
 Verificar los logs de deployment, de ejecución del init Container y la aplicación a modo didáctico.
 ```

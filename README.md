@@ -494,3 +494,4 @@ vault read -tls-skip-verify -format json database/creds/vault-app-mongodb-role
 * https://www.vaultproject.io/docs/platform/k8s/injector
 * https://www.hashicorp.com/blog/injecting-vault-secrets-into-kubernetes-pods-via-a-sidecar/
 * https://www.openshift.com/blog/integrating-hashicorp-vault-in-openshift-4
+* https://github.com/hashicorp/vault-k8s

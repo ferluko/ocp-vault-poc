@@ -160,6 +160,7 @@ Utilizaremos el **SA**(System Account) ```vault-auth``` previamente creado, obte
 Diagrama:
 
 <img src="https://raw.githubusercontent.com/ferluko/ocp-vault-poc/master/images/k8s_auth.png"  width="640">
+
 ```
 oc project hashicorp
 

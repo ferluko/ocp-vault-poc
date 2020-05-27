@@ -113,13 +113,13 @@ vault operator init --tls-skip-verify -key-shares=1 -key-threshold=1
 ```
 Tomar nota de forma segura de `Unseal Key 1`  y el `Initial Root Token`:
 ```
-Unseal Key 1: GA31ux+Bb2XgElZTCDgX0Ytn3aBQtvbvCOqxLTE474M=
-Initial Root Token: s.PqOykxkZ3kkwNESDseF3T8yo
+Unseal Key 1: ylj26D8G/4I5e1+AqlAoRwop5P53I64nnKJ/S/aQJ1U=
+Initial Root Token: s.u7qfUoBRxWh57tJYVu60Idvn
 ```
 Y exportarlas como variables de entornos para futuro uso:
 ```
-export KEYS=GA31ux+Bb2XgElZTCDgX0Ytn3aBQtvbvCOqxLTE474M=
-export ROOT_TOKEN=s.PqOykxkZ3kkwNESDseF3T8yo
+export KEYS=ylj26D8G/4I5e1+AqlAoRwop5P53I64nnKJ/S/aQJ1U=
+export ROOT_TOKEN=s.u7qfUoBRxWh57tJYVu60Idvn
 export VAULT_TOKEN=$ROOT_TOKEN
 ```
 #### Unseal de Vault
@@ -156,6 +156,9 @@ vault login -tls-skip-verify
 
 A continuación estaremos configurando el metodo de autenticación Kubernetes, este mismo se utilizá en los escenarios 1 y 2 para la obtención de secretos.
 Utilizaremos el **SA**(System Account) ```vault-auth``` previamente creado, obtendremos su **token** de K8s y lo registraremos en **Vault** junto a su certificado asociado. De esta forma cada **POD** que se ejecute en K8s podrá autenticarse con Vault. Luego dependerá del **Role** y de la **Policy** asociada que se especifique junto al **token** mencionado para la obtención de los secretos. Complementar el entendimiento con la _Documentación Adicional_.
+
+Diagrama:
+![k8s Auth](https://raw.githubusercontent.com/ferluko/ocp-vault-poc/master/images/k8s_auth.png)
 ```
 oc project hashicorp
 

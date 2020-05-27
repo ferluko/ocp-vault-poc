@@ -158,7 +158,7 @@ A continuación estaremos configurando el metodo de autenticación Kubernetes, e
 Utilizaremos el **SA**(System Account) ```vault-auth``` previamente creado, obtendremos su **token** de K8s y lo registraremos en **Vault** junto a su certificado asociado. De esta forma cada **POD** que se ejecute en K8s podrá autenticarse con Vault. Luego dependerá del **Role** y de la **Policy** asociada que se especifique junto al **token** mencionado para la obtención de los secretos. Complementar el entendimiento con la _Documentación Adicional_.
 
 Diagrama:
-![k8s Auth](https://raw.githubusercontent.com/ferluko/ocp-vault-poc/master/images/k8s_auth.png | width="640")
+<img src="https://raw.githubusercontent.com/ferluko/ocp-vault-poc/master/images/k8s_auth.png"  width="640">
 ```
 oc project hashicorp
 

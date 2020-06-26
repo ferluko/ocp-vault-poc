@@ -1,12 +1,20 @@
-# ocp-vault-poc
+# ocp-vault-poc Stage #1 - OCP + Vault
 Prueba de Concepto para la integración de Hashicorp Vault en Openshift para Aplicaciones "No native Vault logic built-in".
  
 ## Introducción
-
 Estas instrucciones permitirán obtener una copia la PoC en funcionamiento en tu máquina local para propósitos de depliegue y pruebas.
 
-### Pre-Requisitos
+## Conceptos a ver...
+* Conceptos a generales de Vault
+* Instalación: Seal/Unseal
+* Policy/ Role/ Path Secret/ Token
+* Auth Methods: Token, K8s
+* Engines: KV, Database
+* MongoDB Plugin
+* Vault Agent Injector
+* Dynamics Secrets: lease/ revoke
 
+### Pre-Requisitos
 _En tu maquina local._
 * [Openshift CLI](https://docs.openshift.com/container-platform/4.2/cli_reference/openshift_cli/getting-started-cli.html) - Instalado y login configurado contra el cluster OCP
 * [Vault CLI 1.4](https://www.vaultproject.io/docs/install#precompiled-binaries) - Cliente CLI Vault 

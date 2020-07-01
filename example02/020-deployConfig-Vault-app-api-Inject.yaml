@@ -78,7 +78,7 @@ spec:
     spec:
       containers:
         - name: vault-app-api
-          image: image-registry.openshift-image-registry.svc:5000/vault-app/vault-app-api
+          image: 'vault-app-api:latest'
           imagePullPolicy: Always
           env:
             - name: IP

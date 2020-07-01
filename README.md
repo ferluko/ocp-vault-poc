@@ -16,8 +16,10 @@ Estas instrucciones permitirán obtener una copia la PoC en funcionamiento en tu
 
 ### Pre-Requisitos
 _En tu maquina local._
-* [Openshift CLI](https://docs.openshift.com/container-platform/4.2/cli_reference/openshift_cli/getting-started-cli.html) - Instalado y login configurado contra el cluster OCP
+* [Openshift CLI](https://docs.openshift.com/container-platform/4.2/cli_reference/openshift_cli/getting-started-cli.html) - Instalado y login configurado contra el cluster OCP.
 * [Vault CLI 1.4](https://www.vaultproject.io/docs/install#precompiled-binaries) - Cliente CLI Vault 
+
+_NOTA: Este despliegue podrá sencillamente adaptarse a otras versiones de Kubernetes (GKE, AKS, PKS, etc)_
 
 ## Comenzando
 _En tu maquina local._
@@ -55,7 +57,7 @@ watch oc status --suggest
 oc logs -f vault-app-api-1-build
 ```
 
-### Despliegue (Deploy) de la aplicación demo
+### Despliegue (Deploy) de la aplicación "demo"
 A continuación desplegamos la aplicación ```vault-app-api``` con la imagen del último **build** realizado. Las credenciales, el nombre de la base, IP y puerto que serán parte del string de conexión a MongoDB son provistos por **variables de entorno** utilizando los **Secretos de K8s** , los mismos que previamente fueron utilizados para inialización de la misma base de datos. De esta forma representamos un escenario original donde los secretos de una aplicacion (string de conexión) son variables de entorno, es decir secretos de K8s.
 
 **[020-deployConfig-api.yaml](https://github.com/ferluko/ocp-vault-poc/blob/master/example00/020-deployConfig-api.yaml)**
@@ -64,12 +66,23 @@ oc create -f example00/020-deployConfig-api.yaml
 oc expose svc vault-app-api
 oc status --suggest
 ```
-_NOTA: A modo ejemplo de esta PoC, observando los logs del POD de la aplicación se muestra por consola el string de conexión a la base de datos._
+_NOTA: A modo ejemplo de esta PoC, observando en los logs del POD ```vault-app-api``` aparece el string de conexión a la base de datos ni bien se inicializa la aplicación. en un entorno real y productivo no se aconseja ya que va en contra de las buenas prácticas de seguridad, en otras palabra nuestro secreto deja de ser secreto._
 ```oc logs -f vault-app-api```
 
-URL para probar la APP: http://vault-app-api-vault-app.apps.ocp4.labs.semperti.local/api-docs/ 
+Endpoint URL para probar la APP, simplemente pegue la salida el siguiente comando en su Browser:
+```
+echo "http://`oc get route | grep -m1 vault-app-api | awk '{print $2}'`/api-docs/"
+```
+o simplemente pruebe esta API Rest desde su forma nativa:
+```
+curl -X GET "http://`oc get route | grep -m1 vault-app-api | awk '{print $2}'`/appointment" -H "accept: application/json"
+curl -X POST "http://`oc get route | grep -m1 vault-app-api | awk '{print $2}'`/appointment" -H "accept: application/json" -d ""
+curl -X POST "http://`oc get route | grep -m1 vault-app-api | awk '{print $2}'`/appointment" -H "accept: application/json" -d ""
+curl -X POST "http://`oc get route | grep -m1 vault-app-api | awk '{print $2}'`/appointment" -H "accept: application/json" -d ""
+curl -X GET "http://`oc get route | grep -m1 vault-app-api | awk '{print $2}'`/appointment" -H "accept: application/json"
+```
 >
->Utilizando Swagger podemos simular el uso de esta API realizando varios POST comprobando la conexión a la base de datos.
+>Se recomienda utilizar Swagger desde el Browser ya que podemos simular el uso de esta API invocando a los metedos y asi comprobamos la conexión a la base de datos.
 >
 
 ## INSTALACIÓN DE HASHICORP VAULT SERVER EN OPENSHIFT
@@ -121,13 +134,13 @@ vault operator init --tls-skip-verify -key-shares=1 -key-threshold=1
 ```
 Tomar nota de forma segura de `Unseal Key 1`  y el `Initial Root Token`:
 ```
-Unseal Key 1: ylj26D8G/4I5e1+AqlAoRwop5P53I64nnKJ/S/aQJ1U=
-Initial Root Token: s.u7qfUoBRxWh57tJYVu60Idvn
+Unseal Key 1: IK9R9Mn4Rj9ZoW3Cpx+9blxwMZGefQRF2jjgEWDijoQ=
+Initial Root Token: s.lwJF5vQ1pyvCTxjKr1QkYS4L
 ```
 Y exportarlas como variables de entornos para futuro uso:
 ```
-export KEYS=ylj26D8G/4I5e1+AqlAoRwop5P53I64nnKJ/S/aQJ1U=
-export ROOT_TOKEN=s.u7qfUoBRxWh57tJYVu60Idvn
+export KEYS=IK9R9Mn4Rj9ZoW3Cpx+9blxwMZGefQRF2jjgEWDijoQ=
+export ROOT_TOKEN=s.lwJF5vQ1pyvCTxjKr1QkYS4L
 export VAULT_TOKEN=$ROOT_TOKEN
 ```
 #### Unseal de Vault
@@ -153,11 +166,16 @@ HA Enabled      false
 ### Configuración de Vault
 _En tu maquina local._
 
-`$ROOT_TOKEN` es el token que hemos tomado nota en el paso previo (Instalación de Vault) y lo utilizaremos para conectarnos a Vault desde nuestro cliente local y realizar las siguientes configuraciones.
+Ahora si listamos los Pods podrán verificar que el Vault server ya parece como `Ready` dado que pasó con éxito la prueba de `Readiness`
+```
+oc get pods
+```
+
+`$VAULT_TOKEN` es el token que hemos tomado nota en el paso previo (Instalación de Vault) y lo utilizaremos para conectarnos a Vault desde nuestro cliente local y realizar las siguientes configuraciones.
 
 _NOTA:  Vault CLI utiliza las variables de entorno `VAULT_TOKEN` y `VAULT_ADDR` para autenticar sin certificados adicionales, por lo tanto siempre utilizaremos el parámetro `-tls-skip-verify` (Esto es configurable)._
 ```
-export VAULT_TOKEN=$ROOT_TOKEN
+export VAULT_TOKEN=s.lwJF5vQ1pyvCTxjKr1QkYS4L
 export VAULT_ADDR=https://`oc get route | grep -m1 vault | awk '{print $2}'`
 vault login -tls-skip-verify
 ```
@@ -263,9 +281,12 @@ user                admin
 ### Despliegue de aplicación agregando Init Container.
 > _A realizar por Infraestructura (DevOps)_
 
-Para el corriente escenario, al despliegue le estaremos adicionando un **Init Container** al POD de la aplicación para la obtención de los secretos (credenciales de conexión a mongoDB), bajar los secretos a un archivo (`/deployments/config/application.properties`) en un volumen compartido entre ambos containers (init y main container) que será accesible por el **Main Container**, es decir por la aplicación **demo** y conectarse a MongoDB.
+Para el corriente escenario, al despliegue le estaremos adicionando un **Init Container** al POD de la aplicación para la obtención de los secretos (credenciales de conexión a mongoDB), bajar los secretos a un archivo (`/deployments/config/application.properties`) en un volumen compartido entre ambos containers (init y main container) que será accesible por el **Main Container**, es decir por la aplicación **demo** para conectarse a MongoDB.
 
-_**NOTA:** Para propósito de esta PoC, el código de la aplicación fué escasamente adaptado para leer los secretos desde `/deployments/config/application.properties`, de no existir este archivo los secretos serán obtenidos desde las variables de entorno como fué demostrado en el escenario 0._
+_**NOTAS:**
+  * Este escenario es exclusivamente didáctico para demostrar el funcionamiento de Vault y su objetivo particular es demosotrar que solo modificando el despliegue de una aplicación, esta misma que previamente recibía los secretos por variables de entorno, ahora los recibe facilmente desde Vault agregando un `init container`.
+
+  * Adicionalmente para esta PoC, el código de la aplicación fué escasamente adaptado para leer los secretos desde `/deployments/config/application.properties`, de no existir este archivo los secretos serán obtenidos desde las variables de entorno como fué demostrado en el escenario 0.
 
 Primero verificamos el **role** `demo` con **Kubernetes Auth Method** y con la pólitica `policy-example`
 ```
@@ -295,14 +316,15 @@ _**NOTA:** Observar que **no** se realiza un nuevo **build** de la aplicación, 
 
 **[020-deployConfig-api.yaml](https://github.com/ferluko/ocp-vault-poc/blob/master/example01/020-deployConfig-api.yaml)**
 ```
+sed -i -e 's|VAULT_ADDR|'$VAULT_ADDR'|g' ./example01/020-deployConfig-api.yaml 
 oc apply -f example01/020-deployConfig-api.yaml
 oc expose svc vault-app-api
 ```
-Verificar los logs de deployment y de ejecución del init Container y main container a modo didáctico.
+Verificar los logs de deployment y de ejecución del init Container y main container a modo didáctico. En un entorno productivo deberían quitarse los `cat` del script del `init container` del yaml anterior.
 ```
-pod=`oc get pods -L app=vault-app-api --no-headers -o custom-columns=NAME:.metadata.name | tail -n 1`
+pod=`oc get pods -L app=vault-app-api --field-selector status.phase=Running --no-headers -o custom-columns=NAME:.metadata.name | grep vault`
 oc logs -f $pod
-oc logs -f $pod -c vault-api
+oc logs $pod -c vault-init
 ```
 Limpiamos el despliegue de la aplicación `vault-app-api` para dar comienzo al siguiente escenario.
 ```

@@ -88,7 +88,7 @@ spec:
               protocol: TCP
           imagePullPolicy: IfNotPresent
           terminationMessagePolicy: File
-          image: image-registry.openshift-image-registry.svc:5000/vault-app/vault-app-api
+          image: vault-app-api:latest
       serviceAccount: default
       dnsPolicy: ClusterFirst
 

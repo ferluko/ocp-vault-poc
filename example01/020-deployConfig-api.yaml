@@ -39,17 +39,17 @@ spec:
       restartPolicy: Always
       initContainers:
         - name: vault-init
-          image: 'quay.io/lbroudoux/ubi8:latest'
+          image: 'quay.io/ferluko/ubi8:latest'
           command:
             - sh
             - '-c'
             - >
               OCP_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token);
               cat $OCP_TOKEN;
-              curl -k --request POST --data '{"jwt": "'"$OCP_TOKEN"'", "role": "demo"}' https://vault-hashicorp.apps.ocp4.labs.semperti.local/v1/auth/kubernetes/login | jq -j '.auth.client_token' > /etc/vault/token;
+              curl -k --request POST --data '{"jwt": "'"$OCP_TOKEN"'", "role": "demo"}' VAULT_ADDR/v1/auth/kubernetes/login | jq -j '.auth.client_token' > /etc/vault/token;
               X_VAULT_TOKEN=$(cat /etc/vault/token);
               cat $X_VAULT_TOKEN;
-              curl -k --header "X-Vault-Token:$X_VAULT_TOKEN" https://vault-hashicorp.apps.ocp4.labs.semperti.local/v1/secret/mongodb > /etc/app/creds.json;
+              curl -k --header "X-Vault-Token:$X_VAULT_TOKEN" VAULT_ADDR/v1/secret/mongodb > /etc/app/creds.json;
               cat /etc/app/creds.json;
               echo "const config = {db: { SECRET: '$(jq -j '.data.user' /etc/app/creds.json):$(jq -j '.data.password' /etc/app/creds.json)' }};module.exports = config;" >       /etc/app/application.properties;
               cp /etc/app/application.properties /deployments/config/application.properties;
@@ -136,7 +136,7 @@ spec:
             - name: app-config
               mountPath: /deployments/config
           terminationMessagePolicy: File
-          image: image-registry.openshift-image-registry.svc:5000/vault-app/vault-app-api
+          image: 'vault-app-api:latest'
       serviceAccount: default
       volumes:
         - name: app-creds

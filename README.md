@@ -91,12 +91,6 @@ _En tu maquina local._
 ```
 oc new-project hashicorp
 ```
-_**NOTA INTERNA:** Para el almacenamiento de todos los secretos, el siguiente despliegue de Vault utiliza un Physical Volumen (PV) llamado **vault-storage**, en el nodo bastion de nuestro lab se encuentra el siguiente script para crear el NFS export y mapearlo al PV que luego utilizará Vault para su instalación._
-```
-sudo ./nfs.sh 
->/exports/vault-storage
-exit
-```
 
 Creamos el **Kubernetes System Account:** ```vault-auth``` y lo asignamos a todos los proyectos, este SA será ultilizado posteriormente para la autentificación de los PODs con **Vault** utilizando [**Kubernetes Auth Method**](https://www.vaultproject.io/docs/auth/kubernetes). Recomendamos reforzar su conocimiento leyendo como funciona este método en la _Documentación adicional_.
 ```
